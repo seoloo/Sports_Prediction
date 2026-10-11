@@ -7,6 +7,15 @@
 - Preserve prediction snapshots and source, rule, market, result, and model versions. Prevent time leakage with published_at, received_at, and as_of.
 - Do not implement account login automation, purchasing, payments, or access-restriction bypasses.
 
+## Required user report after work
+
+- After each completed work turn, give the user a self-contained report in Korean unless they request another language.
+- State clearly (1) what was changed and the resulting behavior, (2) why those choices were made, and (3) which concrete work should happen next and any prerequisite.
+- Include the relevant checks and results, material limitations or incomplete scope, commit ID, and unpublished main commit count. Distinguish implemented features from planned features and tested behavior from assumptions.
+- Do not use vague completion claims. Identify unavailable data, unreviewed rules, and unvalidated models explicitly when they limit the result.
+- Provide the run command and usable local URL or file links when delivering an executable app or artifact.
+- Keep progress commentary concise; the final report must be understandable without reading earlier updates.
+
 ## Commits
 
 - The user authorizes agents to create local commits automatically after completing coherent, reviewable work and the relevant checks.
