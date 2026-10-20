@@ -24,3 +24,15 @@ def test_missing_env_gives_instruction(tmp_path, monkeypatch):
         monkeypatch.delenv(key, raising=False)
     with pytest.raises(RuntimeError, match="init-env"):
         load_settings(tmp_path / "missing.env")
+
+
+@pytest.mark.parametrize("today, expected", [
+    ("2026-10-21", ["2025-26", "2026-27"]),
+    ("2026-07-01", ["2025-26", "2026-27"]),
+    ("2026-06-30", ["2024-25", "2025-26"]),
+    ("2099-12-31", ["2098-99", "2099-00"]),
+])
+def test_seasons_for(today, expected):
+    from datetime import date
+    from pipelines.schedule import seasons_for
+    assert seasons_for(date.fromisoformat(today)) == expected

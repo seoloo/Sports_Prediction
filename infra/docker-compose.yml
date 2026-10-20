@@ -51,6 +51,69 @@ services:
       retries: 30
     restart: unless-stopped
 
+  # --- 아래는 오케스트레이션(로드맵 1d). 무거워서 --profile airflow를 줄 때만 실행한다. ---
+  # Airflow 메타데이터용 데이터베이스(airflow)를 한 번만 만든다. 이미 있으면 아무것도 하지 않는다.
+  airflow-db-init:
+    image: postgres:16.4
+    profiles: ["airflow"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-sports}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        psql -tAc "SELECT 1 FROM pg_database WHERE datname='airflow'" | grep -q 1
+        || psql -c "CREATE DATABASE airflow"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # 개발용 단일 컨테이너 Airflow(standalone: 스케줄러·API 서버·DAG 처리기를 한 번에 실행).
+  airflow:
+    build:
+      context: ..
+      dockerfile: infra/airflow/Dockerfile
+    image: sports-prediction-airflow:3.3.2
+    profiles: ["airflow"]
+    command: standalone
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/project/dags
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/airflow
+      # 파이프라인 코드가 컨테이너 네트워크 주소로 접속하도록 덮어쓴다(pipelines/config.py).
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-sports}
+      S3_ENDPOINT_URL: http://object-store:8333
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      BRONZE_BUCKET: ${BRONZE_BUCKET:-bronze}
+    ports:
+      - "127.0.0.1:${AIRFLOW_PORT:-58080}:8080"
+    volumes:
+      - ../dags:/opt/project/dags
+      - ../pipelines:/opt/project/pipelines
+      - ../dbt:/opt/project/dbt
+      - airflow-home:/opt/airflow
+    depends_on:
+      airflow-db-init:
+        condition: service_completed_successfully
+      object-store:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/v2/monitor/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   object-store-data:
+  airflow-home:

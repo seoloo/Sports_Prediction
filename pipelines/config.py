@@ -56,13 +56,15 @@ def load_settings(env_path: Path = ENV_PATH) -> Settings:
                if not values.get(key)]
     if missing:
         raise RuntimeError(f".env 설정이 없습니다({', '.join(missing)}). python -m pipelines.config init-env를 실행하세요.")
+    # 기본은 이 PC(127.0.0.1)에서 접속하는 주소다. Airflow 컨테이너 안에서는 POSTGRES_HOST=postgres,
+    # S3_ENDPOINT_URL=http://object-store:8333처럼 컨테이너 네트워크 주소로 바꿔 쓴다.
     return Settings(
-        postgres_host="127.0.0.1",
+        postgres_host=values.get("POSTGRES_HOST", "127.0.0.1"),
         postgres_port=int(values.get("POSTGRES_PORT", "55432")),
         postgres_db=values.get("POSTGRES_DB", "sports"),
         postgres_user=values["POSTGRES_USER"],
         postgres_password=values["POSTGRES_PASSWORD"],
-        s3_endpoint_url=f"http://127.0.0.1:{values.get('S3_PORT', '59000')}",
+        s3_endpoint_url=values.get("S3_ENDPOINT_URL", f"http://127.0.0.1:{values.get('S3_PORT', '59000')}"),
         s3_access_key=values["S3_ACCESS_KEY"],
         s3_secret_key=values["S3_SECRET_KEY"],
         bronze_bucket=values.get("BRONZE_BUCKET", "bronze"),

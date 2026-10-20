@@ -1,0 +1,12 @@
+# Docker 이미지 빌드에 보낼 필요 없는 파일. 가상환경·데이터·비밀 설정이 이미지에 들어가지 않게 한다.
+.git
+.venv
+.venv-dbt
+data
+logs
+dbt/target
+dbt/logs
+.env
+.env.*
+**/__pycache__
+docs/images
