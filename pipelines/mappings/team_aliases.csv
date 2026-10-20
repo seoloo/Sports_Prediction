@@ -1,0 +1,31 @@
+# football-data.co.uk 팀 이름 → openfootball 기준 이름. 2026-10-21 검토: 6개 시즌 같은 날짜 경기 대조에서 모든 등장 경기가 일치함(evidence).
+source_id,alias,canonical_name,evidence
+football-data-co-uk,Arsenal,Arsenal FC,same-date fixtures 197/197
+football-data-co-uk,Aston Villa,Aston Villa FC,same-date fixtures 197/197
+football-data-co-uk,Bournemouth,AFC Bournemouth,same-date fixtures 159/159
+football-data-co-uk,Brentford,Brentford FC,same-date fixtures 197/197
+football-data-co-uk,Brighton,Brighton & Hove Albion FC,same-date fixtures 197/197
+football-data-co-uk,Burnley,Burnley FC,same-date fixtures 114/114
+football-data-co-uk,Chelsea,Chelsea FC,same-date fixtures 197/197
+football-data-co-uk,Coventry,Coventry City FC,same-date fixtures 7/7
+football-data-co-uk,Crystal Palace,Crystal Palace FC,same-date fixtures 197/197
+football-data-co-uk,Everton,Everton FC,same-date fixtures 197/197
+football-data-co-uk,Fulham,Fulham FC,same-date fixtures 159/159
+football-data-co-uk,Hull,Hull City AFC,same-date fixtures 7/7
+football-data-co-uk,Ipswich,Ipswich Town FC,same-date fixtures 45/45
+football-data-co-uk,Leeds,Leeds United FC,same-date fixtures 121/121
+football-data-co-uk,Leicester,Leicester City FC,same-date fixtures 114/114
+football-data-co-uk,Liverpool,Liverpool FC,same-date fixtures 197/197
+football-data-co-uk,Luton,Luton Town FC,same-date fixtures 38/38
+football-data-co-uk,Man City,Manchester City FC,same-date fixtures 197/197
+football-data-co-uk,Man United,Manchester United FC,same-date fixtures 197/197
+football-data-co-uk,Newcastle,Newcastle United FC,same-date fixtures 197/197
+football-data-co-uk,Norwich,Norwich City FC,same-date fixtures 38/38
+football-data-co-uk,Nott'm Forest,Nottingham Forest FC,same-date fixtures 159/159
+football-data-co-uk,Sheffield United,Sheffield United FC,same-date fixtures 38/38
+football-data-co-uk,Southampton,Southampton FC,same-date fixtures 114/114
+football-data-co-uk,Sunderland,Sunderland AFC,same-date fixtures 45/45
+football-data-co-uk,Tottenham,Tottenham Hotspur FC,same-date fixtures 197/197
+football-data-co-uk,Watford,Watford FC,same-date fixtures 38/38
+football-data-co-uk,West Ham,West Ham United FC,same-date fixtures 190/190
+football-data-co-uk,Wolves,Wolverhampton Wanderers FC,same-date fixtures 190/190

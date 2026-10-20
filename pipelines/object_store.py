@@ -41,11 +41,12 @@ def object_exists(store, bucket: str, key: str) -> bool:
         raise
 
 
-def put_if_absent(store, bucket: str, key: str, payload: bytes, metadata: dict) -> bool:
+def put_if_absent(store, bucket: str, key: str, payload: bytes, metadata: dict,
+                  content_type: str = "application/json") -> bool:
     """객체가 없을 때만 올린다. 새로 올렸으면 True, 이미 있었으면 False."""
     if object_exists(store, bucket, key):
         return False
-    store.put_object(Bucket=bucket, Key=key, Body=payload, ContentType="application/json", Metadata=metadata)
+    store.put_object(Bucket=bucket, Key=key, Body=payload, ContentType=content_type, Metadata=metadata)
     return True
 
 
