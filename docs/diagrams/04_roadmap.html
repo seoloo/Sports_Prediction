@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>04 로드맵과 목표 아키텍처</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .arch { padding: 20px 22px; }
+  .lanes { display: grid; grid-template-columns: 1.15fr 1fr 1fr 1fr 1fr 1fr; gap: 28px; align-items: stretch; }
+  .col { position: relative; display: flex; flex-direction: column; gap: 8px; }
+  .col:not(:last-child)::after {
+    content: ""; position: absolute; right: -21px; top: 50%; width: 14px; height: 14px;
+    border-top: 3px solid var(--primary); border-right: 3px solid var(--primary);
+    transform: translateY(-50%) rotate(45deg); opacity: .5;
+  }
+  .col .label { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+  .box { border-radius: 12px; padding: 10px 12px; font-size: 13.5px; line-height: 1.45; border: 1px solid var(--line); background: #fff; }
+  .box b { display: block; font-size: 14.5px; }
+  .box span { color: var(--muted); font-size: 12.5px; }
+  .box.done { border-color: #b7e6df; background: var(--done-soft); }
+  .box.next { border-color: #c9ccfb; background: var(--primary-soft); }
+  .box.plan { border-style: dashed; background: #fbfcfe; }
+  .bands { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .band { border-radius: 12px; padding: 9px 14px; font-size: 13.5px; border: 1px dashed var(--line); background: #fbfcfe; color: #475467; }
+  .band b { color: var(--ink); margin-right: 8px; }
+  .stages { margin-top: 20px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; position: relative; }
+  .stages::before { content: ""; position: absolute; left: 30px; right: 30px; top: 21px; height: 4px; background: linear-gradient(90deg, var(--done) 0 12%, var(--primary) 12% 34%, var(--line) 34% 100%); border-radius: 2px; }
+  .stage { position: relative; padding: 0 10px; }
+  .dot { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; background: #fff; border: 3px solid var(--line); color: var(--muted); position: relative; z-index: 1; }
+  .stage.done .dot { border-color: var(--done); background: var(--done); color: #fff; }
+  .stage.next .dot { border-color: var(--primary); color: var(--primary); }
+  .stage h4 { font-size: 16px; margin: 10px 0 4px; display: flex; gap: 8px; align-items: center; }
+  .stage p { font-size: 13px; color: #475467; line-height: 1.55; }
+  .stage .need { margin-top: 6px; font-size: 12px; color: var(--warn); font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="eyebrow">Roadmap · Target Architecture</div>
+      <h1>해외축구 데이터 플랫폼 로드맵</h1>
+      <div class="subtitle">기존 도메인 로직(검증·버전·시점 규칙)은 그대로 두고, 그 위에 데이터 엔지니어링 파이프라인을 단계별로 올립니다.</div>
+    </div>
+    <div class="stamp legend"><span class="chip done">● 완료</span><span class="chip next">● 다음</span><span class="chip">○ 계획</span></div>
+  </div>
+
+  <div class="card arch">
+    <div class="lanes">
+      <div class="col">
+        <div class="label">Sources</div>
+        <div class="box next"><b>openfootball</b><span>CC0 · 일정·전후반 점수 자동 수집</span></div>
+        <div class="box plan"><b>football-data.co.uk</b><span>마감 배당 · 직접 내려받은 CSV만</span></div>
+        <div class="box plan"><b>football-data.org</b><span>API · 분당 10회 · 키 필요</span></div>
+      </div>
+      <div class="col">
+        <div class="label">Ingest</div>
+        <div class="box next"><b>배치 수집</b><span>Python · 원본 해시 · 멱등</span></div>
+        <div class="box plan"><b>Kafka</b><span>정정·배당 변경 이벤트, 과거 시즌 재생</span></div>
+      </div>
+      <div class="col">
+        <div class="label">Bronze</div>
+        <div class="box next"><b>MinIO</b><span>원본 파일 그대로 + received_at</span></div>
+      </div>
+      <div class="col">
+        <div class="label">Silver</div>
+        <div class="box next"><b>PostgreSQL</b><span>경기·결과 버전, 팀 별칭 매핑</span></div>
+        <div class="box done"><b>기존 도메인 로직</b><span>검증·as_of 선택·사용권</span></div>
+      </div>
+      <div class="col">
+        <div class="label">Gold</div>
+        <div class="box plan"><b>dbt · Spark</b><span>시점 기준 특징, 백테스트 데이터셋, 품질 테스트</span></div>
+      </div>
+      <div class="col">
+        <div class="label">Model · Serve</div>
+        <div class="box plan"><b>EPL 기준 모델</b><span>Poisson / Dixon-Coles, 시간순 검증</span></div>
+        <div class="box plan"><b>FastAPI · 모바일</b><span>예측 스냅샷 조회</span></div>
+      </div>
+    </div>
+    <div class="bands">
+      <div class="band"><b>⚙️ Airflow</b>수집 → 정제 → 특징 → 학습 → 평가 순서·재시도·백필</div>
+      <div class="band"><b>🐳 Docker Compose → ☸️ Kubernetes</b>로컬 127.0.0.1 개발 → kind/k3d + Helm 배포 · GitHub Actions CI</div>
+    </div>
+  </div>
+
+  <div class="stages">
+    <div class="stage done"><div class="dot">0</div><h4>소스 검토 <span class="chip done">완료</span></h4><p>소스별 약관·역할 정리, 로드맵 작성</p></div>
+    <div class="stage next"><div class="dot">1</div><h4>배치 기반 <span class="chip next">다음</span></h4><p>Postgres·MinIO, openfootball 수집, 배당 CSV, dbt·Airflow·CI</p><div class="need">1c 전: 배당 CSV 직접 다운로드</div></div>
+    <div class="stage"><div class="dot">2</div><h4>스트리밍</h4><p>Kafka, API 폴링 수집기, 과거 시즌 재생, 중복·지연 처리</p><div class="need">football-data.org 키 필요</div></div>
+    <div class="stage"><div class="dot">3</div><h4>모델·검증</h4><p>EPL 기준 모델, 시간순 백테스트, Log loss·Brier, 시장 배당 비교</p></div>
+    <div class="stage"><div class="dot">4</div><h4>서빙·배포</h4><p>FastAPI, 모바일 화면, Kubernetes 배포, 모니터링</p><div class="need">외부 접속 방식 결정 필요</div></div>
+  </div>
+</body>
+</html>

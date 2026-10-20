@@ -1,0 +1,60 @@
+/* README 다이어그램 공통 스타일. 모든 시안이 같은 색·글꼴·카드 모양을 쓰도록 한곳에 모았습니다. */
+:root {
+  --bg: #f6f7fb;          /* 바탕 */
+  --card: #ffffff;        /* 카드 바탕 */
+  --ink: #1e2433;         /* 본문 글자 */
+  --muted: #667085;       /* 보조 설명 */
+  --line: #e4e7ef;        /* 카드 테두리·구분선 */
+  --primary: #4f46e5;     /* 강조(남색) */
+  --primary-soft: #eef0ff;
+  --done: #0f9f8f;        /* 구현됨(청록) */
+  --done-soft: #e6f7f4;
+  --next: #4f46e5;        /* 다음 작업(남색) */
+  --plan: #98a2b3;        /* 계획(회색) */
+  --plan-soft: #f2f4f7;
+  --warn: #d97706;        /* 주의·가정(주황) */
+  --warn-soft: #fff4e5;
+  --stop: #e0445a;        /* 제외·보류(빨강) */
+  --stop-soft: #fdecef;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1600px; height: 900px; overflow: hidden; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Noto Sans KR", "Malgun Gothic", sans-serif;
+  padding: 44px 56px;
+  -webkit-font-smoothing: antialiased;
+}
+.header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 28px; }
+.eyebrow { font-size: 15px; font-weight: 700; letter-spacing: .08em; color: var(--primary); text-transform: uppercase; }
+h1 { font-size: 38px; font-weight: 800; letter-spacing: -.02em; margin-top: 4px; }
+.subtitle { font-size: 17px; color: var(--muted); margin-top: 8px; }
+.stamp { font-size: 13px; color: var(--muted); text-align: right; line-height: 1.6; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 6px 18px rgba(16, 24, 40, .05);
+  padding: 22px 24px;
+}
+.card h3 { font-size: 19px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+.card p, .card li { font-size: 14.5px; color: #475467; line-height: 1.6; }
+.card ul { list-style: none; }
+.card li { padding-left: 16px; position: relative; }
+.card li::before { content: ""; position: absolute; left: 2px; top: 10px; width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+.icon {
+  width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px; background: var(--primary-soft); color: var(--primary); flex: none;
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;
+  padding: 4px 11px; border-radius: 999px; background: var(--plan-soft); color: #475467; white-space: nowrap;
+}
+.chip.done { background: var(--done-soft); color: var(--done); }
+.chip.next { background: var(--primary-soft); color: var(--primary); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.stop { background: var(--stop-soft); color: var(--stop); }
+.code { font-family: "Cascadia Code", Consolas, monospace; font-size: 12.5px; color: var(--primary); background: var(--primary-soft); padding: 2px 7px; border-radius: 6px; }
+.legend { display: flex; gap: 10px; align-items: center; }
+.footer { position: absolute; left: 56px; right: 56px; bottom: 26px; display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); }

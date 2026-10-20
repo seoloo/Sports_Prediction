@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>02 현재 구현된 데이터 흐름</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .flow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 34px; position: relative; }
+  .step { position: relative; padding: 20px 18px 18px; min-height: 318px; display: flex; flex-direction: column; }
+  .step .num { width: 30px; height: 30px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+  .step h3 { font-size: 17.5px; margin-bottom: 10px; }
+  .step li { font-size: 13.5px; margin-bottom: 3px; }
+  .step .files { margin-top: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding-top: 12px; }
+  .step:not(:last-child)::after {
+    content: ""; position: absolute; right: -27px; top: 50%; width: 20px; height: 20px;
+    border-top: 3px solid var(--primary); border-right: 3px solid var(--primary);
+    transform: translateY(-50%) rotate(45deg); opacity: .55;
+  }
+  .step.reject { border-color: #f7c4cc; }
+  .result { background: var(--stop-soft); border-color: #f7c4cc; }
+  .result .num { background: var(--stop); }
+  .store { margin-top: 26px; display: grid; grid-template-columns: 250px 1fr; gap: 22px; align-items: stretch; }
+  .store .title { background: #1e2433; color: #fff; border: none; display: flex; flex-direction: column; justify-content: center; }
+  .store .title h3 { color: #fff; font-size: 19px; }
+  .store .title p { color: rgba(255,255,255,.75); font-size: 13.5px; }
+  .tables { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .group { border: 1px dashed var(--line); border-radius: 14px; padding: 12px 14px; background: #fbfcfe; }
+  .group b { font-size: 13.5px; display: block; margin-bottom: 7px; }
+  .group .t { display: inline-block; font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; padding: 2px 7px; border-radius: 6px; margin: 0 4px 5px 0; background: var(--plan-soft); color: #344054; }
+  .group .t.lock { background: var(--done-soft); color: var(--done); }
+  .note { margin-top: 16px; display: flex; gap: 18px; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="eyebrow">Current Implementation · Data Flow</div>
+      <h1>현재 구현된 데이터 흐름</h1>
+      <div class="subtitle">입력부터 기준 시각 재생까지. 한 단계라도 조건을 못 맞추면 저장을 거부하거나 보류 이유를 남깁니다.</div>
+    </div>
+    <div class="stamp legend"><span class="chip done">● 구현됨</span><span class="chip stop">● 보류·거부</span></div>
+  </div>
+
+  <div class="flow">
+    <div class="card step">
+      <div class="num">1</div>
+      <h3>소스 등록·사용권</h3>
+      <ul><li>출처·약관 URL·근거 기록</li><li>승인 안 된 소스는 PENDING → 입력 불가</li><li>학습용·공식 확인용 권한 별도 승인</li></ul>
+      <div class="files"><span class="code">catalog.py</span><span class="code">evidence.py</span></div>
+    </div>
+    <div class="card step">
+      <div class="num">2</div>
+      <h3>입력</h3>
+      <div class="files"><span class="code">app.py</span><span class="code">bulk_import.py</span></div>
+    </div>
+    <div class="card step reject">
+      <div class="num">3</div>
+      <h3>검증 미리보기</h3>
+      <ul><li>열 이름·시간대·숫자 형식</li><li>미등록 경기·참가자 이름</li><li>파일 내 중복, 기존 값과 충돌</li><li><b style="color:var(--stop)">오류 1건이면 파일 전체 거부</b></li></ul>
+      <div class="files"><span class="code">catalog.py</span></div>
+    </div>
+    <div class="card step">
+      <div class="num">4</div>
+      <h3>원자적 저장</h3>
+      <ul><li>쓰기 잠금 + 트랜잭션 안에서 재검증</li><li>원본 바이트·SHA-256 보관</li><li>같은 파일 재입력은 건너뜀</li><li>변경은 새 버전 행 추가</li></ul>
+      <div class="files"><span class="code">catalog.py</span><span class="code">history.py</span></div>
+    </div>
+    <div class="card step">
+      <div class="num">5</div>
+      <h3>기준 시각 재생</h3>
+      <ul><li>as_of 시점에 알려진 버전만 선택</li><li>입력 스냅샷 (INPUT_REPLAY)</li><li>특징 스냅샷 (FEATURE_REPLAY)</li><li>결과 대조: MATCHED · PENDING · REVIEW_REQUIRED</li></ul>
+      <div class="files"><span class="code">history.py</span><span class="code">features.py</span></div>
+    </div>
+    <div class="card step result">
+      <div class="num">6</div>
+      <h3>예측 상태</h3>
+      <ul><li><b>WITHHELD</b> (확률 미제공)</li><li>MODEL_UNVALIDATED</li><li>UNKNOWN_RULE · NO_DATA 등 이유 함께 저장</li></ul>
+      <div class="files"><span class="code">rules.py</span><span class="code">evidence.py</span></div>
+    </div>
+  </div>
+
+  <div class="store">
+    <div class="card title">
+      <h3>🗄️ SQLite 저장소</h3>
+      <p>data/sports.sqlite3 (내 데이터)<br>data/demo.sqlite3 (가상 예시)<br>DB 버전 v4, 전환 전 자동 백업</p>
+    </div>
+    <div class="card tables">
+      <div class="group"><b>버전 이력 (추가만)</b><span class="t lock">event_revisions</span><span class="t lock">market_revisions</span><span class="t lock">observation_revisions</span><span class="t lock">result_revisions</span></div>
+      <div class="group"><b>규칙·사용권·공식</b><span class="t lock">rule_versions</span><span class="t lock">source_permissions</span><span class="t lock">official_revisions</span><span class="t lock">feature_contracts</span></div>
+      <div class="group"><b>스냅샷·감사</b><span class="t lock">feature_snapshots</span><span class="t lock">comparison_snapshots</span><span class="t">audit_log</span></div>
+    </div>
+  </div>
+  <div class="note"><span><span class="chip done">초록 표</span> 수정·삭제를 DB 트리거가 차단하는 불변 테이블</span><span>모든 시각은 UTC로 저장하고 화면에서는 한국시간으로 표시합니다.</span></div>
+</body>
+</html>

@@ -2,6 +2,18 @@
 
 
 
+## 그림으로 보기
+
+![프로젝트 소개: 왜 시작했나, 어떤 기술을 왜 골랐나, 최종 목표](docs/images/01_overview.png)
+
+![현재 구현된 데이터 흐름](docs/images/02_data_flow.png)
+
+![시점 누수 방지: 그때 알 수 있던 것만 쓴다](docs/images/03_point_in_time.png)
+
+![해외축구 데이터 플랫폼 로드맵](docs/images/04_roadmap.png)
+
+그림 원본은 [docs/diagrams/](docs/diagrams/)의 HTML입니다. 내용을 고친 뒤 `.\scripts\render_diagrams.ps1`을 실행하면 docs/images/의 PNG를 다시 만듭니다(설치된 Edge 또는 Chrome 사용).
+
 ## 실행
 
 Python 3.12 이상과 Windows PowerShell을 기준으로 합니다. 저장소 폴더에서 실행하세요.

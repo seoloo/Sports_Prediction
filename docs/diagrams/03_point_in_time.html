@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>03 시점 누수 방지</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .timeline { padding: 18px 22px 10px; }
+  svg text { font-family: "Noto Sans KR", sans-serif; }
+  .defs { display: grid; grid-template-columns: repeat(3, 1fr) 1.25fr; gap: 16px; margin-top: 18px; }
+  .defs .card { padding: 16px 18px; }
+  .defs h3 { font-size: 16.5px; margin-bottom: 4px; }
+  .defs p { font-size: 13.5px; }
+  .rule { background: #1e2433; border: none; }
+  .rule h3 { color: #fff; }
+  .rule li { color: rgba(255,255,255,.82); font-size: 13.5px; }
+  .rule li::before { background: rgba(255,255,255,.35); }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="eyebrow">Core Concept · Point-in-time Correctness</div>
+      <h1>시점 누수 방지: 그때 알 수 있던 것만 쓴다</h1>
+      <div class="subtitle">예시: 10월 12일 18:00(as_of)에 19:00 경기를 예측할 때, 기록 4개 중 무엇을 쓸 수 있을까?</div>
+    </div>
+    <div class="stamp">시간 간격은 실제 비율이 아닙니다</div>
+  </div>
+
+  <div class="card timeline">
+    <svg width="1444" height="392" viewBox="0 0 1444 392">
+      <!-- 기준 시각 이후 영역: 미래 정보라서 사용 금지 -->
+      <rect x="800" y="40" width="270" height="345" fill="#fdecef" opacity=".55" rx="8"/>
+      <text x="935" y="380" text-anchor="middle" font-size="12.5" fill="#e0445a" font-weight="700">as_of 이후 = 사용 금지 구간</text>
+
+      <!-- 시간축 -->
+      <line x1="40" y1="58" x2="1070" y2="58" stroke="#d0d5dd" stroke-width="2"/>
+      <text x="80" y="30" font-size="13" fill="#667085" text-anchor="middle">10/10</text>
+      <text x="430" y="30" font-size="13" fill="#667085" text-anchor="middle">10/11</text>
+      <text x="700" y="30" font-size="13" fill="#667085" text-anchor="middle">10/12</text>
+
+      <!-- 기준 시각·마감·경기 시작 -->
+      <line x1="800" y1="44" x2="800" y2="362" stroke="#4f46e5" stroke-width="3"/>
+      <rect x="742" y="12" width="116" height="26" rx="13" fill="#4f46e5"/>
+      <text x="800" y="30" font-size="13" fill="#fff" text-anchor="middle" font-weight="700">as_of 18:00</text>
+      <line x1="950" y1="44" x2="950" y2="362" stroke="#d97706" stroke-width="2" stroke-dasharray="6 5"/>
+      <text x="950" y="30" font-size="12.5" fill="#d97706" text-anchor="middle" font-weight="700">마감 18:30</text>
+      <line x1="1040" y1="44" x2="1040" y2="362" stroke="#98a2b3" stroke-width="2" stroke-dasharray="6 5"/>
+      <text x="1040" y="30" font-size="12.5" fill="#667085" text-anchor="middle" font-weight="700">시작 19:00</text>
+
+      <!-- 범례 -->
+      <circle cx="52" cy="84" r="6" fill="#1e2433"/><text x="64" y="89" font-size="12.5" fill="#667085">발표 시각 published_at</text>
+      <rect x="216" y="78" width="12" height="12" rx="2" fill="#fff" stroke="#1e2433" stroke-width="2"/><text x="236" y="89" font-size="12.5" fill="#667085">입력 시각 received_at</text>
+
+      <!-- A: 포함 -->
+      <text x="40" y="129" font-size="14" font-weight="700" fill="#1e2433">A 최근 5경기 득점</text>
+      <line x1="80" y1="148" x2="115" y2="148" stroke="#0f9f8f" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="80" cy="148" r="7" fill="#0f9f8f"/><rect x="109" y="142" width="12" height="12" rx="2" fill="#fff" stroke="#0f9f8f" stroke-width="2.5"/>
+      <rect x="1100" y="128" width="340" height="38" rx="10" fill="#e6f7f4"/>
+      <text x="1116" y="152" font-size="14" font-weight="700" fill="#0f9f8f">✓ 포함</text>
+      <text x="1180" y="152" font-size="13" fill="#475467">발표·입력 모두 as_of 이전</text>
+
+      <!-- B: 늦게 입력 -->
+      <text x="40" y="191" font-size="14" font-weight="700" fill="#1e2433">B 선발 명단</text>
+      <line x1="480" y1="210" x2="900" y2="210" stroke="#e0445a" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 8"/>
+      <circle cx="480" cy="210" r="7" fill="#1e2433"/><rect x="894" y="204" width="12" height="12" rx="2" fill="#fff" stroke="#e0445a" stroke-width="2.5"/>
+      <text x="900" y="236" font-size="12" fill="#e0445a" text-anchor="middle">18:20 입력</text>
+      <rect x="1100" y="190" width="340" height="38" rx="10" fill="#fdecef"/>
+      <text x="1116" y="214" font-size="14" font-weight="700" fill="#e0445a">✕ 제외</text>
+      <text x="1180" y="214" font-size="12.5" fill="#475467">RECEIVED_AFTER_AS_OF · 그때 없었음</text>
+
+      <!-- C: 늦게 발표 -->
+      <text x="40" y="253" font-size="14" font-weight="700" fill="#1e2433">C 부상 소식</text>
+      <line x1="850" y1="272" x2="875" y2="272" stroke="#e0445a" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="850" cy="272" r="7" fill="#e0445a"/><rect x="869" y="266" width="12" height="12" rx="2" fill="#fff" stroke="#e0445a" stroke-width="2.5"/>
+      <text x="862" y="298" font-size="12" fill="#e0445a" text-anchor="middle">18:10 발표</text>
+      <rect x="1100" y="252" width="340" height="38" rx="10" fill="#fdecef"/>
+      <text x="1116" y="276" font-size="14" font-weight="700" fill="#e0445a">✕ 제외</text>
+      <text x="1180" y="276" font-size="12.5" fill="#475467">PUBLISHED_AFTER_AS_OF · 미래 정보</text>
+
+      <!-- D: 결측 -->
+      <text x="40" y="315" font-size="14" font-weight="700" fill="#1e2433">D 점유율</text>
+      <line x1="400" y1="334" x2="430" y2="334" stroke="#98a2b3" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="400" cy="334" r="7" fill="#98a2b3"/><rect x="424" y="328" width="12" height="12" rx="2" fill="#fff" stroke="#98a2b3" stroke-width="2.5"/>
+      <text x="448" y="339" font-size="12.5" fill="#667085">값 = 빈칸 (0이 아님)</text>
+      <rect x="1100" y="314" width="340" height="38" rx="10" fill="#f2f4f7"/>
+      <text x="1116" y="338" font-size="14" font-weight="700" fill="#667085">✕ 제외</text>
+      <text x="1180" y="338" font-size="12.5" fill="#475467">MISSING_VALUE · 0으로 채우지 않음</text>
+    </svg>
+  </div>
+
+  <div class="defs">
+    <div class="card"><h3>📣 published_at</h3><p>자료가 <b>세상에 발표된</b> 시각. 모르면 과거로 지어내지 않고 입력 시각을 보수적으로 사용합니다.</p></div>
+    <div class="card"><h3>📥 received_at</h3><p>이 앱이 자료를 <b>실제로 확보한</b> 시각. 발표가 빨라도 늦게 받았으면 그 전 예측에는 못 씁니다.</p></div>
+    <div class="card"><h3>🎯 as_of</h3><p>예측·재생의 <b>기준 시각</b>. 이 시각 이하의 버전만 골라 같은 입력이면 항상 같은 해시가 나옵니다.</p></div>
+  </div>
+</body>
+</html>

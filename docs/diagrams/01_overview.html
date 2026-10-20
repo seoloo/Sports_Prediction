@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>01 프로젝트 소개</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .story { display: grid; grid-template-columns: 410px 1fr 400px; gap: 40px; position: relative; }
+  .col-title { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+  .col-title .step { font-size: 13px; font-weight: 800; letter-spacing: .1em; color: var(--primary); }
+  .col-title h2 { font-size: 22px; font-weight: 800; }
+  .section { position: relative; }
+  .section:not(:last-child)::after {
+    content: ""; position: absolute; right: -29px; top: 300px; width: 18px; height: 18px;
+    border-top: 3px solid var(--primary); border-right: 3px solid var(--primary);
+    transform: rotate(45deg); opacity: .45;
+  }
+  .problem { padding: 15px 18px; margin-bottom: 11px; }
+  .problem h3 { font-size: 16px; margin-bottom: 3px; }
+  .problem p { font-size: 13.5px; line-height: 1.55; }
+  .problem .tag { font-size: 12px; font-weight: 700; color: var(--stop); margin-right: 6px; }
+  .motive { padding: 15px 18px; margin-bottom: 11px; border-color: #c9ccfb; background: var(--primary-soft); }
+  .motive h3 { font-size: 16px; margin-bottom: 3px; }
+  .motive p { font-size: 13.5px; line-height: 1.55; }
+  .answer { background: #1e2433; border: none; padding: 16px 18px; }
+  .answer p { color: rgba(255,255,255,.85); font-size: 14px; line-height: 1.6; }
+  .answer b { color: #fff; }
+  .tech { padding: 8px 0; }
+  .tech-row { display: grid; grid-template-columns: 158px 1fr 72px; gap: 14px; align-items: center; padding: 10.5px 20px; border-bottom: 1px solid var(--line); }
+  .tech-row:last-child { border-bottom: none; }
+  .tech-row .name { font-size: 15px; font-weight: 800; }
+  .tech-row .name span { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-top: 1px; }
+  .tech-row .why { font-size: 13.5px; color: #475467; line-height: 1.5; }
+  .tech-row .why b { color: var(--ink); }
+  .tech-row .chip { justify-self: end; font-size: 12px; padding: 3px 9px; }
+  .goal { background: linear-gradient(160deg, #4f46e5 0%, #6d5ef0 100%); border: none; color: #fff; padding: 22px 22px; }
+  .goal .lead { font-size: 19px; font-weight: 800; line-height: 1.5; margin-bottom: 16px; }
+  .goal .item { background: rgba(255,255,255,.12); border-radius: 12px; padding: 11px 14px; margin-bottom: 9px; }
+  .goal .item b { display: block; font-size: 14.5px; margin-bottom: 2px; }
+  .goal .item span { font-size: 13px; color: rgba(255,255,255,.82); line-height: 1.5; }
+  .first { margin-top: 12px; padding: 13px 16px; display: flex; gap: 12px; align-items: center; }
+  .first .em { font-size: 26px; }
+  .first b { font-size: 14.5px; display: block; }
+  .first span { font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="eyebrow">Sports Prediction Data Platform</div>
+      <h1>그때 알 수 있던 데이터만으로, 검증 가능한 스포츠 예측</h1>
+      <div class="subtitle">경기 결과 예측보다 먼저, 예측에 쓰는 데이터를 믿을 수 있게 만드는 데이터 엔지니어링 프로젝트</div>
+    </div>
+    <div class="stamp legend"><span class="chip done">● 사용 중</span><span class="chip">○ 도입 예정</span></div>
+  </div>
+
+  <div class="story">
+    <div class="section">
+      <div class="col-title"><span class="step">01 WHY</span><h2>왜 시작했나</h2></div>
+      <div class="card motive"><h3>🎯 시작한 계기</h3><p>스포츠 경기를 데이터로 직접 예측해 보고 싶었고, 데이터 엔지니어로서 <b>수집부터 검증까지 전 과정</b>을 실제 문제로 다뤄 보고 싶었습니다. 막상 시작하니 모델보다 먼저 부딪힌 건 데이터였습니다.</p></div>
+      <div class="card problem"><h3><span class="tag">문제 1</span>미래 정보가 섞인다</h3><p>경기 후에 갱신된 기록이나 마감 직전 배당이 학습에 섞이면, 백테스트 성능이 실제보다 좋아 보입니다.</p></div>
+      <div class="card problem"><h3><span class="tag">문제 2</span>데이터는 계속 바뀐다</h3><p>일정 변경, 기록 정정, 늦은 입력이 흔합니다. 값을 덮어쓰면 "그때 무엇을 알았는지" 다시 재현할 수 없습니다.</p></div>
+      <div class="card problem"><h3><span class="tag">문제 3</span>출처마다 쓸 수 있는 범위가 다르다</h3><p>무료 데이터라도 저장·학습·재배포 허용 범위가 제각각입니다.</p></div>
+      <div class="card answer"><p>그래서 <b>모델보다 데이터 기반을 먼저</b> 만들었습니다. 모든 자료에 발표 시각과 입력 시각을 남기고, 덮어쓰지 않고 버전으로 쌓아, <b>어느 시점이든 그때의 입력을 그대로 재현</b>할 수 있게 합니다.</p></div>
+    </div>
+
+    <div class="section">
+      <div class="col-title"><span class="step">02 HOW</span><h2>어떤 기술을, 왜 골랐나</h2></div>
+      <div class="card tech">
+        <div class="tech-row"><div class="name">Python · Streamlit<span>입력·검증·화면</span></div><div class="why">한 언어로 데이터 검증부터 화면까지 빠르게 만들고, <b>개인 PC(127.0.0.1)에서만</b> 동작시키기 위해</div><span class="chip done">사용 중</span></div>
+        <div class="tech-row"><div class="name">SQLite → Postgres<span>운영 DB</span></div><div class="why">버전 테이블과 트리거로 <b>이력 수정·삭제를 DB가 차단</b>. 여러 작업의 동시 쓰기와 dbt·Airflow 연결을 위해 PostgreSQL로 이전</div><span class="chip warn">전환 예정</span></div>
+        <div class="tech-row"><div class="name">MinIO · Parquet<span>원본 저장 (Bronze)</span></div><div class="why">받은 원본을 그대로 보존해, 규칙이 바뀌어도 <b>처음부터 다시 처리</b>할 수 있게</div><span class="chip">예정</span></div>
+        <div class="tech-row"><div class="name">Kafka<span>스트리밍 수집</span></div><div class="why">결과 정정·배당 변경은 원래 <b>시간순 이벤트</b>입니다. 덮어쓰지 않는 버전 구조와 같은 모델이고, 과거 시즌을 다시 흘려 검증</div><span class="chip">예정</span></div>
+        <div class="tech-row"><div class="name">Spark<span>대용량 처리</span></div><div class="why">여러 리그·시즌을 다시 계산하고 이벤트 단위 자료를 다루는 단계에서 <b>시점 기준 특징을 대량 계산</b></div><span class="chip">예정</span></div>
+        <div class="tech-row"><div class="name">dbt<span>변환·품질 테스트</span></div><div class="why">특징 테이블 정의와 품질 검사를 <b>코드로 관리하고 리뷰</b>하기 위해</div><span class="chip">예정</span></div>
+        <div class="tech-row"><div class="name">Airflow<span>오케스트레이션</span></div><div class="why">수집 → 정제 → 특징 → 학습 → 평가의 <b>순서·재시도·백필</b>을 자동화</div><span class="chip">예정</span></div>
+        <div class="tech-row"><div class="name">Docker · Kubernetes<span>실행 환경</span></div><div class="why">누구나 같은 환경을 <b>한 번에 재현</b>하고, 배포 구성까지 보여주기 위해</div><span class="chip">예정</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="col-title"><span class="step">03 GOAL</span><h2>최종 목표</h2></div>
+      <div class="card goal">
+        <div class="lead">경기 마감 전에, 그때 알 수 있던 데이터로만 계산한 확률을 남기고 실제 결과로 검증하는 예측 플랫폼</div>
+        <div class="item"><b>재현 가능한 예측</b><span>모든 예측을 기준 시각·데이터 버전과 함께 저장. 같은 입력이면 같은 결과</span></div>
+        <div class="item"><b>숫자로 하는 검증</b><span>시간순 백테스트로 기준 모델·시장 배당과 비교 (Log loss, Brier score)</span></div>
+        <div class="item"><b>검증된 확률만 제공</b><span>데이터나 검증이 부족하면 추측하지 않고 보류 이유를 표시</span></div>
+        <div class="item"><b>어디서나 확인</b><span>휴대폰에서 예측과 근거 조회</span></div>
+      </div>
+      <div class="card first"><div class="em">⚽</div><div><b>첫 대상: 해외축구 EPL</b><span>무료로 쓸 수 있는 데이터 범위를 확인한 뒤 다른 리그·종목으로 확장</span></div></div>
+    </div>
+  </div>
+</body>
+</html>
