@@ -12,6 +12,8 @@
 
 ![해외축구 데이터 플랫폼 로드맵](docs/images/04_roadmap.png)
 
+![매주 경기에 맞춰 스스로 도는 분석(로드맵 2단계 계획)](docs/images/05_matchday_cycle.png)
+
 그림 원본은 [docs/diagrams/](docs/diagrams/)의 HTML입니다. 내용을 고친 뒤 `.\scripts\render_diagrams.ps1`을 실행하면 docs/images/의 PNG를 다시 만듭니다(설치된 Edge 또는 Chrome 사용).
 
 ## 실행

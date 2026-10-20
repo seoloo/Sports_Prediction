@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>05 매치데이 자동 분석 주기</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .cycle { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 16px; padding-top: 66px; }
+  .rail { position: absolute; left: 20px; right: 20px; top: 92px; height: 4px; border-radius: 2px;
+          background: linear-gradient(90deg, var(--primary) 0 57%, var(--done) 57% 100%); opacity: .35; }
+  .deadline { position: absolute; left: calc(57% - 1px); top: 18px; bottom: -6px; border-left: 3px dashed var(--warn); }
+  .deadline span { position: absolute; top: 0; left: 50%; transform: translateX(-50%); white-space: nowrap;
+                   background: var(--warn); color: #fff; font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 999px; }
+  .node { position: relative; text-align: center; }
+  .dot { width: 22px; height: 22px; border-radius: 50%; margin: 15px auto 18px; background: #fff; border: 4px solid var(--primary); position: relative; z-index: 1; }
+  .node.post .dot { border-color: var(--done); }
+  .when { font-size: 13px; font-weight: 800; color: var(--primary); letter-spacing: .02em; }
+  .node.post .when { color: var(--done); }
+  .node .card { padding: 14px 13px; min-height: 190px; text-align: left; display: flex; flex-direction: column; }
+  .node .card h3 { font-size: 15.5px; margin-bottom: 6px; }
+  .node .card p { font-size: 13px; line-height: 1.55; }
+  .node .card .by { margin-top: auto; padding-top: 10px; display: flex; gap: 5px; flex-wrap: wrap; }
+  .bottom { margin-top: 26px; display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; }
+  .bottom .card h3 { font-size: 17px; margin-bottom: 8px; }
+  .bottom li { font-size: 13.5px; margin-bottom: 4px; }
+  .why { background: #1e2433; border: none; }
+  .why h3 { color: #fff; }
+  .why p { color: rgba(255,255,255,.85); font-size: 14px; line-height: 1.65; }
+  .why b { color: #fff; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="eyebrow">Matchday Automation · Near Real-time</div>
+      <h1>매주 경기에 맞춰 스스로 도는 분석</h1>
+      <div class="subtitle">일정·배당·결과가 들어오는 대로 분 단위로 갱신합니다. 사람이 매번 실행하지 않아도 마감 전 예측과 경기 후 검증이 쌓입니다.</div>
+    </div>
+    <div class="stamp legend"><span class="chip next">● 마감 전: 예측</span><span class="chip done">● 경기 후: 검증</span><span class="chip">로드맵 2단계</span></div>
+  </div>
+
+  <div class="cycle">
+    <div class="rail"></div>
+
+    <div class="node"><div class="when">매일</div><div class="dot"></div>
+      <div class="card"><h3>일정 수집</h3><p>다음 경기 일정과 일정 변경을 가져와 새 버전으로 저장</p><div class="by"><span class="code">Airflow</span></div></div></div>
+    <div class="node"><div class="when">마감 24시간 전</div><div class="dot"></div>
+      <div class="card"><h3>첫 스냅샷</h3><p>그 시점에 알려진 일정·기록·배당만으로 입력과 특징을 고정해 저장</p><div class="by"><span class="code">Airflow</span></div></div></div>
+    <div class="node"><div class="when">입력이 바뀔 때</div><div class="dot"></div>
+      <div class="card"><h3>변경 반영</h3><p>배당·라인업·일정 변경 이벤트를 받으면 스냅샷을 하나 더 추가</p><div class="by"><span class="code">Kafka</span></div></div></div>
+    <div class="node"><div class="when">마감 3시간·1시간 전</div><div class="dot"></div>
+      <div class="card"><h3>마지막 스냅샷</h3><p>마감 직전 정보까지 반영한 최종 예측 입력. 이후에는 사전 예측으로 인정하지 않음</p><div class="by"><span class="code">Airflow</span></div></div></div>
+    <div class="node post"><div class="when">경기 중</div><div class="dot"></div>
+      <div class="card"><h3>결과 폴링</h3><p>대회별로 묶어 수 분 간격 조회. 분당 10회 요청 한도를 지키고 429 응답이면 대기</p><div class="by"><span class="code">Kafka</span></div></div></div>
+    <div class="node post"><div class="when">경기 종료 후</div><div class="dot"></div>
+      <div class="card"><h3>확정·대조</h3><p>결과 버전을 저장하고 공식 결과와 대조한 뒤 마감 전 예측을 채점</p><div class="by"><span class="code">Kafka</span><span class="code">Postgres</span></div></div></div>
+    <div class="node post"><div class="when">매주</div><div class="dot"></div>
+      <div class="card"><h3>성능 보고서</h3><p>Log loss·Brier·보류율을 기준 모델·시장 배당과 비교하고 휴대폰으로 알림</p><div class="by"><span class="code">Airflow</span><span class="code">dbt</span></div></div></div>
+  </div>
+
+  <div class="bottom">
+    <div class="card why"><h3>왜 자동화가 필요한가</h3><p>과거 자료로 다시 만든 백테스트는 실제 수집 지연을 재현하지 못합니다. <b>마감 전에 실제로 저장한 예측</b>이 매주 쌓여야 모델 성능을 정직하게 말할 수 있습니다. 놓친 스냅샷은 나중에 만들지 않고 누락으로 기록합니다.</p></div>
+    <div class="card"><h3>범위와 한계</h3><ul>
+      <li>경기 중 실시간(인플레이) 예측은 하지 않습니다. 허용 조건이 확인된 경기 중 데이터가 없습니다.</li>
+      <li>무료 API의 요청 한도와 갱신 지연 때문에 초 단위가 아닌 분 단위입니다.</li>
+      <li>로컬 실행이라 PC가 켜져 있어야 합니다. 상시 실행 환경은 별도로 결정합니다.</li>
+    </ul></div>
+  </div>
+</body>
+</html>

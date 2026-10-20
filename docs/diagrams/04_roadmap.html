@@ -85,7 +85,7 @@
   <div class="stages">
     <div class="stage done"><div class="dot">0</div><h4>소스 검토 <span class="chip done">완료</span></h4><p>소스별 약관·역할 정리, 로드맵 작성</p></div>
     <div class="stage next"><div class="dot">1</div><h4>배치 기반 <span class="chip next">다음</span></h4><p>Postgres·MinIO, openfootball 수집, 배당 CSV, dbt·Airflow·CI</p><div class="need">1c 전: 배당 CSV 직접 다운로드</div></div>
-    <div class="stage"><div class="dot">2</div><h4>스트리밍</h4><p>Kafka, API 폴링 수집기, 과거 시즌 재생, 중복·지연 처리</p><div class="need">football-data.org 키 필요</div></div>
+    <div class="stage"><div class="dot">2</div><h4>스트리밍·자동 분석</h4><p>Kafka, API 폴링 수집기, 마감 전 자동 스냅샷, 과거 시즌 재생, 중복·지연 처리</p><div class="need">football-data.org 키 필요</div></div>
     <div class="stage"><div class="dot">3</div><h4>모델·검증</h4><p>EPL 기준 모델, 시간순 백테스트, Log loss·Brier, 시장 배당 비교</p></div>
     <div class="stage"><div class="dot">4</div><h4>서빙·배포</h4><p>FastAPI, 모바일 화면, Kubernetes 배포, 모니터링</p><div class="need">외부 접속 방식 결정 필요</div></div>
   </div>
