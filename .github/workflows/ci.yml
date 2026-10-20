@@ -1,4 +1,4 @@
-# CI: 단위 테스트 + Postgres·S3를 띄운 통합 테스트 + 수집→dbt 종단 실행.
+# CI: 단위 테스트 + Postgres·S3·Kafka를 띄운 통합 테스트 + 수집→dbt 종단 실행.
 # CI의 계정 정보는 실행이 끝나면 사라지는 일회용 컨테이너용이라 비밀값이 아니다(실제 .env와 무관).
 name: ci
 
@@ -23,6 +23,7 @@ jobs:
       S3_SECRET_KEY: ci-only-throwaway-secret
       S3_PORT: "59000"
       BRONZE_BUCKET: bronze
+      KAFKA_PORT: "59092"
       # 서비스가 없으면 통합 테스트를 건너뛰지 않고 실패시킨다. CI에서 조용히 건너뛰면 고장을 놓친다.
       REQUIRE_INTEGRATION: "1"
     services:
@@ -56,6 +57,24 @@ jobs:
             sleep 2
           done
           docker logs object-store; exit 1
+
+      - name: Start Kafka (KRaft single node)
+        run: |
+          docker run -d --name kafka -p 59092:9092 \
+            -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller \
+            -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
+            -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://127.0.0.1:59092 \
+            -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+            -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
+            -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
+            -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 \
+            -e KAFKA_AUTO_CREATE_TOPICS_ENABLE=false apache/kafka:4.3.1
+          for i in $(seq 1 60); do
+            docker exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1 \
+              && echo "Kafka ready" && exit 0
+            sleep 2
+          done
+          docker logs kafka; exit 1
 
       - name: Install app and pipeline dependencies
         run: pip install -r requirements.lock

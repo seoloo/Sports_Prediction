@@ -1,0 +1,12 @@
+{"filters": {"season": 2025}, "resultSet": {"count": 3},
+ "matches": [
+  {"id": 9001, "utcDate": "2025-08-16T14:00:00Z", "status": "FINISHED", "matchday": 1, "lastUpdated": "2025-08-16T16:10:00Z",
+   "homeTeam": {"id": 1, "name": "Alpha FC"}, "awayTeam": {"id": 2, "name": "Beta FC"},
+   "score": {"winner": "HOME_TEAM", "duration": "REGULAR", "fullTime": {"home": 2, "away": 1}, "halfTime": {"home": 1, "away": 0}}},
+  {"id": 9002, "utcDate": "2025-08-16T16:30:00Z", "status": "TIMED", "matchday": 1, "lastUpdated": "2025-08-10T09:00:00Z",
+   "homeTeam": {"id": 3, "name": "Gamma FC"}, "awayTeam": {"id": 4, "name": "Delta FC"},
+   "score": {"winner": null, "duration": "REGULAR", "fullTime": {"home": null, "away": null}, "halfTime": {"home": null, "away": null}}},
+  {"id": 9003, "utcDate": "2025-12-26T12:30:00Z", "status": "SCHEDULED", "matchday": 18, "lastUpdated": "2025-08-01T00:00:00Z",
+   "homeTeam": {"id": 2, "name": "Beta FC"}, "awayTeam": {"id": 3, "name": "Gamma FC"},
+   "score": {"winner": null, "duration": "REGULAR", "fullTime": {"home": null, "away": null}, "halfTime": {"home": null, "away": null}}}
+ ]}

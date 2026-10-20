@@ -29,3 +29,24 @@ football-data-co-uk,Tottenham,Tottenham Hotspur FC,same-date fixtures 197/197
 football-data-co-uk,Watford,Watford FC,same-date fixtures 38/38
 football-data-co-uk,West Ham,West Ham United FC,same-date fixtures 190/190
 football-data-co-uk,Wolves,Wolverhampton Wanderers FC,same-date fixtures 190/190
+# football-data.org 팀 ID → 기준 이름. 2026-10-21 검토: 2026-27 시즌 같은 날짜(±1일) 경기 대조, API 팀 이름이 기준 이름과 정확히 같음. 37/38은 두 소스의 일정이 다른 경기 1건.
+football-data-org,57,Arsenal FC,Arsenal FC; same-date(+-1d) fixtures 38/38
+football-data-org,58,Aston Villa FC,Aston Villa FC; same-date(+-1d) fixtures 37/38
+football-data-org,61,Chelsea FC,Chelsea FC; same-date(+-1d) fixtures 37/38
+football-data-org,62,Everton FC,Everton FC; same-date(+-1d) fixtures 37/38
+football-data-org,63,Fulham FC,Fulham FC; same-date(+-1d) fixtures 38/38
+football-data-org,64,Liverpool FC,Liverpool FC; same-date(+-1d) fixtures 38/38
+football-data-org,65,Manchester City FC,Manchester City FC; same-date(+-1d) fixtures 38/38
+football-data-org,66,Manchester United FC,Manchester United FC; same-date(+-1d) fixtures 38/38
+football-data-org,67,Newcastle United FC,Newcastle United FC; same-date(+-1d) fixtures 38/38
+football-data-org,71,Sunderland AFC,Sunderland AFC; same-date(+-1d) fixtures 38/38
+football-data-org,73,Tottenham Hotspur FC,Tottenham Hotspur FC; same-date(+-1d) fixtures 37/38
+football-data-org,322,Hull City AFC,Hull City AFC; same-date(+-1d) fixtures 37/38
+football-data-org,341,Leeds United FC,Leeds United FC; same-date(+-1d) fixtures 38/38
+football-data-org,349,Ipswich Town FC,Ipswich Town FC; same-date(+-1d) fixtures 38/38
+football-data-org,351,Nottingham Forest FC,Nottingham Forest FC; same-date(+-1d) fixtures 38/38
+football-data-org,354,Crystal Palace FC,Crystal Palace FC; same-date(+-1d) fixtures 38/38
+football-data-org,397,Brighton & Hove Albion FC,Brighton & Hove Albion FC; same-date(+-1d) fixtures 38/38
+football-data-org,402,Brentford FC,Brentford FC; same-date(+-1d) fixtures 37/38
+football-data-org,1044,AFC Bournemouth,AFC Bournemouth; same-date(+-1d) fixtures 38/38
+football-data-org,1076,Coventry City FC,Coventry City FC; same-date(+-1d) fixtures 38/38

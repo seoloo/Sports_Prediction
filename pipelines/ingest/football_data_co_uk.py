@@ -30,13 +30,13 @@ from pathlib import Path
 import psycopg
 from psycopg.types.json import Jsonb
 
+from ..aliases import ALIAS_FILE, load_alias_file, sync_aliases
 from ..config import PROJECT_ROOT, load_settings
 from ..db import connect, migrate
 from ..object_store import client, ensure_bucket, put_if_absent
 
 SOURCE_ID = "football-data-co-uk"
 LANDING_DIR = PROJECT_ROOT / "data" / "landing" / "football-data-co-uk"
-ALIAS_FILE = Path(__file__).resolve().parents[1] / "mappings" / "team_aliases.csv"
 
 # 리그 코드(football-data) → openfootball 리그 코드
 DIVISION_TO_COMPETITION = {"E0": "en.1"}
@@ -225,27 +225,6 @@ def parse_csv(payload: bytes, *, division: str) -> tuple[list[FixtureRow], list[
             reject(code, column=column, value=row.get(column))
         fixtures.append(FixtureRow(index, match_date, match_time, home, away, ft_home, ft_away, tuple(quotes)))
     return fixtures, issues
-
-
-def load_alias_file(path: Path = ALIAS_FILE) -> list[dict]:
-    """검토한 팀 이름 대조표를 읽는다. 열: source_id, alias, canonical_name, evidence. #으로 시작하는 줄은 설명이다."""
-    with path.open(encoding="utf-8", newline="") as handle:
-        return list(csv.DictReader(line for line in handle if not line.startswith("#")))
-
-
-def sync_aliases(conn: psycopg.Connection, aliases: list[dict], now: datetime) -> None:
-    """대조표의 별칭을 silver.team_aliases에 넣는다. 이미 다른 팀으로 등록된 별칭이 있으면 멈춘다(덮어쓰지 않음)."""
-    for alias in aliases:
-        team = conn.execute("SELECT team_id FROM silver.teams WHERE canonical_name=%s", (alias["canonical_name"],)).fetchone()
-        if not team:
-            raise ValueError(f"대조표의 팀이 Silver에 없습니다: {alias['canonical_name']}")
-        existing = conn.execute("SELECT team_id FROM silver.team_aliases WHERE source_id=%s AND alias=%s",
-                                (alias["source_id"], alias["alias"])).fetchone()
-        if existing and existing[0] != team[0]:
-            raise ValueError(f"별칭 충돌: {alias['alias']}은 이미 다른 팀에 연결되어 있습니다.")
-        if not existing:
-            conn.execute("INSERT INTO silver.team_aliases VALUES (%s, %s, %s, %s)",
-                         (alias["source_id"], alias["alias"], team[0], now))
 
 
 def link_fixtures(conn: psycopg.Connection, fixtures: list[FixtureRow], *, competition: str, season: str):

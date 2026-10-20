@@ -101,6 +101,7 @@ def test_landing_files_and_alias_file(tmp_path):
     assert [path.name for path in landing_files(tmp_path)] == ["E0_2021_22.csv", "E0_2025-26.csv"]
     assert landing_files(tmp_path / "missing") == []
     aliases = load_alias_file()
-    assert len(aliases) == 29 and len({row["alias"] for row in aliases}) == 29
+    co_uk = [row for row in aliases if row["source_id"] == "football-data-co-uk"]
+    assert len(co_uk) == 29 and len({row["alias"] for row in co_uk}) == 29
     assert {"alias": "Nott'm Forest", "canonical_name": "Nottingham Forest FC"}.items() <= next(
         row for row in aliases if row["alias"] == "Nott'm Forest").items()
