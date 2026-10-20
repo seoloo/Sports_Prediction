@@ -145,3 +145,23 @@ def test_content_hash_ignores_last_updated():
     match = normalize_match(SAMPLE["matches"][0])
     assert content_hash(match) == content_hash({**match, "last_updated": "2099-01-01T00:00:00Z"})
     assert content_hash(match) != content_hash({**match, "ft_home": 3})
+
+
+def test_inject_faults_is_deterministic_and_puts_late_events_after_results():
+    from pipelines.streaming.replay import inject_faults
+    ordered = []
+    for i in range(40):
+        ordered.append((NOW + timedelta(hours=i), f"m{i}", f"s{i}".encode(), "SCHEDULED"))
+        ordered.append((NOW + timedelta(days=10, hours=i), f"m{i}", f"f{i}".encode(), "FINISHED"))
+    ordered.sort(key=lambda item: item[0])
+    first = inject_faults(ordered, seed=3, duplicate_rate=0.2, late_rate=0.2)
+    assert first == inject_faults(ordered, seed=3, duplicate_rate=0.2, late_rate=0.2)
+    sent, duplicates, late = first
+    assert len(sent) == len(ordered) + duplicates and duplicates > 0 and late > 0
+    for key in {item[1] for item in ordered}:
+        positions = [i for i, item in enumerate(sent) if item[1] == key]
+        statuses = [sent[i][3] for i in positions]
+        if statuses.index("FINISHED") < statuses.index("SCHEDULED"):  # 늦게 도착한 일정 발표
+            late -= 1
+    assert late == 0
+    assert inject_faults(ordered, seed=3, duplicate_rate=0, late_rate=0) == (ordered, 0, 0)

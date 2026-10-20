@@ -115,3 +115,28 @@ def test_poll_once_stores_bronze_and_publishes_only_when_content_changes(stream)
     rows = query(s, "SELECT external_match_id, status, ft_home, published_at FROM silver.live_match_revisions ORDER BY 1")
     assert [(r[0], r[1], r[2]) for r in rows] == [("9001", "FINISHED", 2), ("9002", "TIMED", None), ("9003", "SCHEDULED", None)]
     assert rows[0][3] == datetime(2025, 8, 16, 16, 10, tzinfo=timezone.utc)
+
+
+def test_season_replay_reaches_the_source_state_despite_faults(stream):
+    import psycopg as pg
+    from dataclasses import replace
+    from pipelines.ingest import openfootball
+    from pipelines.streaming import replay
+    from tests.test_pipeline_integration import SAMPLE_PATH
+    s, topic, _ = stream
+    openfootball.ingest("2025-26", "en.1", payload=SAMPLE_PATH.read_bytes(), source_url="file:sample.json", settings=s,
+                        received_at=datetime(2025, 8, 17, tzinfo=timezone.utc))
+    target = replace(s, postgres_db=s.postgres_db + "_replay")
+    with pg.connect(s.postgres_conninfo, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{target.postgres_db}"')
+    try:
+        stats = replay.replay_season("2025-26", source_settings=s, target_settings=target, topic=topic,
+                                     seed=1, duplicate_rate=0.5, late_rate=0.5)
+        assert stats["mismatches"] == 0 and stats["matches_replayed"] == stats["matches_expected"] == 5
+        consumer = stats["consumer"]
+        assert consumer.get("DUPLICATE", 0) == stats["injected_duplicates"]
+        assert consumer.get("REJECTED:STALE_EVENT", 0) == stats["injected_late"]
+        assert consumer["INSERTED"] == stats["events"] - stats["injected_late"]
+    finally:
+        with pg.connect(s.postgres_conninfo, autocommit=True) as admin:
+            admin.execute(f'DROP DATABASE "{target.postgres_db}" WITH (FORCE)')
