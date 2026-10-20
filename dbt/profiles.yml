@@ -1,0 +1,14 @@
+# 접속 정보는 파일에 적지 않고 환경 변수에서 읽는다. pipelines/dbt_runner.py가 .env 값을 넣어 준다.
+sports_prediction:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DBT_POSTGRES_HOST', '127.0.0.1') }}"
+      port: "{{ env_var('DBT_POSTGRES_PORT', '55432') | as_number }}"
+      user: "{{ env_var('DBT_POSTGRES_USER') }}"
+      password: "{{ env_var('DBT_POSTGRES_PASSWORD') }}"
+      dbname: "{{ env_var('DBT_POSTGRES_DB', 'sports') }}"
+      schema: gold
+      threads: 4
+      connect_timeout: 10

@@ -8,6 +8,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv-dbt/
 venv/
 .pytest_cache/
 .mypy_cache/
@@ -17,6 +18,10 @@ build/
 dist/
 
 # Runtime data and generated outputs
+/dbt/target/
+/dbt/logs/
+/dbt/dbt_packages/
+/logs/
 /data/
 /artifacts/
 *.sqlite

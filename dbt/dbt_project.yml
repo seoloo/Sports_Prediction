@@ -1,0 +1,26 @@
+# Gold 계층 변환과 품질 테스트(로드맵 1d).
+# 실행은 python -m pipelines.dbt_runner build를 쓴다. .env의 접속 정보를 dbt 환경 변수로 넘겨 준다.
+name: sports_prediction
+version: "0.1.0"
+config-version: 2
+profile: sports_prediction
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "logs"]
+
+vars:
+  # 기준 시각. 기본값이면 지금까지 입력된 최신 버전을 쓰고, 과거 시각을 주면 그때 알려진 버전으로 다시 계산한다.
+  # 예: dbt build --vars '{as_of: "2025-01-01T00:00:00Z"}'
+  as_of: "9999-12-31T00:00:00Z"
+
+models:
+  sports_prediction:
+    staging:
+      +schema: staging
+      +materialized: view
+    gold:
+      +schema: gold
+      +materialized: table

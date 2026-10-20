@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: silver
+    description: 수집기(pipelines/ingest)가 쓰는 정제 테이블. dbt는 읽기만 한다.
+    tables:
+      - name: teams
+      - name: matches
+      - name: match_revisions
+        description: 경기 내용의 버전. 수정·삭제는 DB 트리거가 막는다.

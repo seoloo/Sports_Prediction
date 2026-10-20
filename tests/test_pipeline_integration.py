@@ -6,6 +6,7 @@
 버킷을 매번 새로 만들면 SeaweedFS가 버킷마다 볼륨을 새로 잡아 저장 공간을 빠르게 소모하기 때문이다.
 """
 import json
+import os
 import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -37,7 +38,9 @@ def isolated_settings():
         admin = psycopg.connect(base.postgres_conninfo, autocommit=True)
         store = client(base)
         store.list_buckets()
-    except Exception as exc:  # 서비스가 없으면 단위 테스트만 실행한다.
+    except Exception as exc:  # 서비스가 없으면 단위 테스트만 실행한다. CI(REQUIRE_INTEGRATION=1)에서는 실패시킨다.
+        if os.environ.get("REQUIRE_INTEGRATION") == "1":
+            raise
         pytest.skip(f"Postgres/S3 서비스 없음: {exc}")
     database = f"sp_test_{uuid.uuid4().hex[:10]}"
     admin.execute(f'CREATE DATABASE "{database}"')

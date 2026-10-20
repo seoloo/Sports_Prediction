@@ -1,0 +1,47 @@
+version: 2
+
+models:
+  - name: stg_matches_known
+    description: 기준 시각에 알려진 경기별 최신 버전과 팀 이름
+    columns:
+      - name: match_id
+        data_tests: [unique, not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["SCHEDULED", "FINISHED"]
+
+  - name: team_match_results
+    description: 끝난 경기를 팀 관점 2행으로 펼친 테이블
+    data_tests:
+      - dbt_utils_free_unique_combination:
+          arguments:
+            columns: ["match_id", "venue"]
+    columns:
+      - name: result
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["W", "D", "L"]
+      - name: goals_for
+        data_tests: [not_null]
+      - name: points
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1, 3]
+                quote: false
+
+  - name: league_standings
+    description: 리그·시즌별 순위표
+    data_tests:
+      - dbt_utils_free_unique_combination:
+          arguments:
+            columns: ["competition_code", "season", "team"]
+      - dbt_utils_free_unique_combination:
+          arguments:
+            columns: ["competition_code", "season", "position"]
+    columns:
+      - name: points
+        data_tests: [not_null]
