@@ -3,7 +3,7 @@ name = "sports-prediction"
 version = "0.1.0"
 description = "Personal sports prediction data platform: local catalog app and data pipelines"
 requires-python = ">=3.12"
-dependencies = ["streamlit==1.65.0", "tzdata==2026.5", "psycopg[binary]==3.3.6", "boto3==1.43.115"]
+dependencies = ["streamlit==1.65.0", "tzdata==2026.5", "psycopg[binary]==3.3.6", "boto3==1.43.115", "confluent-kafka==2.15.1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
