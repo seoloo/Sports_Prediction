@@ -2,7 +2,7 @@ version: 2
 
 models:
   - name: stg_matches_known
-    description: 기준 시각에 알려진 경기별 최신 버전과 팀 이름
+    description: 기준 시각에 알려진 경기별 최신 정보(football-data.org 우선, 없으면 openfootball)와 팀 이름
     columns:
       - name: match_id
         data_tests: [unique, not_null]
@@ -10,7 +10,12 @@ models:
         data_tests:
           - accepted_values:
               arguments:
-                values: ["SCHEDULED", "FINISHED"]
+                values: ["SCHEDULED", "LIVE", "FINISHED", "AWARDED", "NOT_PLAYED"]
+      - name: fixture_source
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["openfootball", "football-data-org"]
 
   - name: team_match_results
     description: 끝난 경기를 팀 관점 2행으로 펼친 테이블

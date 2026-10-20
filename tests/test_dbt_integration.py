@@ -82,3 +82,31 @@ def test_failing_quality_test_fails_build(dbt_settings):
     with psycopg.connect(s.postgres_conninfo) as conn:
         conn.execute("UPDATE gold.league_standings SET points = points + 1 WHERE position = 1")
     assert dbt_runner.run_dbt(["test", "--quiet", "--select", "assert_standings_balance"], s) != 0
+
+
+def test_live_source_overrides_openfootball_in_gold(dbt_settings):
+    """football-data.org 버전이 있으면 Gold가 그 값을 쓰고, 그 버전을 받기 전 시점으로 다시 계산하면 openfootball 값을 쓴다."""
+    from datetime import timezone
+    from pipelines.aliases import sync_aliases
+    from pipelines.streaming import events
+    from pipelines.streaming.match_consumer import handle_match_event
+    s = dbt_settings
+    ingest(s, SAMPLE_PATH.read_bytes(), "2025-08-17T00:00:00+00:00")
+    received = datetime.now(timezone.utc)
+    payload = {"external_match_id": "9001", "utc_kickoff": "2025-08-16T14:00:00Z", "status": "FINISHED", "matchday": 1,
+               "home_team_id": "1", "home_team_name": "Alpha FC", "away_team_id": "2", "away_team_name": "Beta FC",
+               "ft_home": 4, "ft_away": 1, "ht_home": 1, "ht_away": 0, "duration": "REGULAR",
+               "last_updated": "2025-08-16T16:10:00Z", "competition": "en.1", "season": "2025-26", "raw_file_id": None}
+    raw = events.encode(events.build_event(source_id="football-data-org", event_type="match_snapshot", key="9001",
+                                           payload=payload, published_at=datetime.fromisoformat("2025-08-16T16:10:00+00:00"),
+                                           observed_at=received))
+    with psycopg.connect(s.postgres_conninfo) as conn:
+        sync_aliases(conn, [{"source_id": "football-data-org", "alias": "1", "canonical_name": "Alpha FC"},
+                            {"source_id": "football-data-org", "alias": "2", "canonical_name": "Beta FC"}], received)
+        assert handle_match_event(conn, raw, topic="t", partition=0, offset=0, now=received) == "INSERTED"
+    alpha = "SELECT goals_for FROM gold.league_standings WHERE team='Alpha FC'"
+    source = "SELECT fixture_source FROM staging.stg_matches_known WHERE home_team='Alpha FC' AND away_team='Beta FC'"
+    build(s)
+    assert query(s, alpha)[0][0] == 4 and query(s, source)[0][0] == "football-data-org"
+    build(s, "--vars", '{as_of: "2025-08-18T00:00:00Z"}')  # live 버전을 받기 전 시점
+    assert query(s, alpha)[0][0] == 2 and query(s, source)[0][0] == "openfootball"

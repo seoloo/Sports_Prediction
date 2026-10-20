@@ -8,5 +8,7 @@ sources:
       - name: matches
       - name: match_revisions
         description: 경기 내용의 버전. 수정·삭제는 DB 트리거가 막는다.
+      - name: live_match_revisions
+        description: football-data.org 경기 상태·점수의 버전(Kafka 소비자가 씀).
       - name: odds_revisions
         description: 배당의 버전(football-data.co.uk). 수정·삭제는 DB 트리거가 막는다.
