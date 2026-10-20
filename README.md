@@ -59,6 +59,34 @@ docker compose --env-file .env -f infra/docker-compose.yml up -d
 - 기준 시각 조회: `SELECT * FROM silver.match_revisions_known_at('2026-01-01T00:00:00Z');`
 - 객체 저장소는 처음 계획한 MinIO 대신 SeaweedFS를 씁니다. MinIO 커뮤니티판의 Docker 이미지 배포가 중단되었기 때문입니다. 코드는 표준 S3 API(boto3)만 사용합니다.
 - 중지: `docker compose --env-file .env -f infra/docker-compose.yml down` (데이터 볼륨은 유지됩니다)
+
+### Gold 변환과 오케스트레이션 (로드맵 1d)
+
+dbt는 Streamlit과 protobuf 버전이 충돌해 별도 가상환경(`.venv-dbt`)에 설치합니다.
+
+~~~powershell
+py -3.12 -m venv .venv-dbt
+.\.venv-dbt\Scripts\python.exe -m pip install -r requirements-dbt.lock
+.\.venv\Scripts\python.exe -m pipelines.dbt_runner build
+~~~
+
+- `staging.stg_matches_known`: 기준 시각에 알려진 경기별 최신 버전(뷰)
+- `gold.team_match_results`: 끝난 경기를 팀 관점 2행으로 펼친 테이블
+- `gold.league_standings`: 리그·시즌별 순위표(승점 → 골득실 → 다득점 → 이름 순)
+- 품질 테스트: 유일성·필수값·허용값, 경기 수 = 승+무+패, 승점 = 3×승+무, 시즌 득점 합 = 실점 합, 끝난 경기마다 팀 행 2개
+- 과거 시점으로 다시 계산: `.\.venv\Scripts\python.exe -m pipelines.dbt_runner build --vars "{as_of: '2025-01-01T00:00:00Z'}"`
+
+Airflow는 무거워서 `airflow` 프로필을 줄 때만 실행합니다. 처음에는 이미지를 빌드하므로 몇 분 걸립니다.
+
+~~~powershell
+docker compose --env-file .env -f infra/docker-compose.yml --profile airflow up -d --build
+docker compose --env-file .env -f infra/docker-compose.yml exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.generated
+~~~
+
+- 화면: http://127.0.0.1:58080 (두 번째 명령이 보여주는 admin 비밀번호로 로그인)
+- DAG `openfootball_epl_daily`: 매일 06:00 UTC에 스키마 확인 → 이전·현재 시즌 수집(시즌별 동적 태스크) → `dbt build`. 아직 올라오지 않은 시즌(404)은 건너뜁니다. 품질 테스트가 실패하면 실행이 실패로 표시됩니다.
+- `dags/`, `pipelines/`, `dbt/` 폴더는 컨테이너에 연결되어 있어 코드를 고치면 바로 반영됩니다.
+- CI(`.github/workflows/ci.yml`)는 GitHub에 푸시하면 Postgres·SeaweedFS를 띄워 전체 테스트와 수집→dbt 종단 실행을 합니다.
 - 통합 테스트(`tests/test_pipeline_integration.py`)는 서비스가 켜져 있을 때만 실행되고, 임시 DB와 테스트 전용 버킷을 쓴 뒤 정리합니다. 서비스가 꺼져 있으면 건너뜁니다.
 
 ## 처음 사용하는 순서
@@ -146,7 +174,7 @@ expected_revision_no는 앱의 현재 버전입니다. 최초 결과는 0, 결�
 
 ## 다음 개발
 
-첫 실제 종목은 해외축구(EPL부터)입니다. 이 저장소 안에서 Postgres·S3 호환 저장소·Kafka·Spark·Airflow 기반 데이터 파이프라인을 단계적으로 추가합니다. 단계와 기술 선택 이유는 [데이터 플랫폼 로드맵](docs/de_platform_roadmap.md), 소스별 사용 조건과 역할은 [해외축구 데이터 소스 검토](docs/football_data_sources.md)를 확인하세요. 1a(로컬 인프라)와 1b(openfootball 배치 수집)는 구현했습니다. 다음 구현 묶음은 1c(직접 내려받은 배당 CSV 수집)와 1d(dbt·Airflow·CI)입니다. 지금은 가상 자료와 구조 검증이며 실제 모델 성능 검증·전체 예외 규칙 검토는 완료하지 않았습니다.
+첫 실제 종목은 해외축구(EPL부터)입니다. 이 저장소 안에서 Postgres·S3 호환 저장소·Kafka·Spark·Airflow 기반 데이터 파이프라인을 단계적으로 추가합니다. 단계와 기술 선택 이유는 [데이터 플랫폼 로드맵](docs/de_platform_roadmap.md), 소스별 사용 조건과 역할은 [해외축구 데이터 소스 검토](docs/football_data_sources.md)를 확인하세요. 1a(로컬 인프라), 1b(openfootball 배치 수집), 1d(dbt·Airflow·CI)는 구현했습니다. 남은 1단계 작업은 1c(직접 내려받은 배당 CSV 수집)입니다. 지금은 가상 자료와 구조 검증이며 실제 모델 성능 검증·전체 예외 규칙 검토는 완료하지 않았습니다.
 
 
 화면 업로드와 테스트 구현은 [Streamlit 파일 업로드 문서](https://docs.streamlit.io/develop/api-reference/widgets/st.file_uploader)와 [앱 테스트 문서](https://docs.streamlit.io/develop/api-reference/app-testing)를 참고했습니다.

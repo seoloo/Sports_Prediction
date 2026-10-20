@@ -1,0 +1,73 @@
+# CI: 단위 테스트 + Postgres·S3를 띄운 통합 테스트 + 수집→dbt 종단 실행.
+# CI의 계정 정보는 실행이 끝나면 사라지는 일회용 컨테이너용이라 비밀값이 아니다(실제 .env와 무관).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      POSTGRES_USER: sports
+      POSTGRES_PASSWORD: ci-only-throwaway
+      POSTGRES_DB: sports
+      POSTGRES_PORT: "55432"
+      S3_ACCESS_KEY: ci-access
+      S3_SECRET_KEY: ci-only-throwaway-secret
+      S3_PORT: "59000"
+      BRONZE_BUCKET: bronze
+      # 서비스가 없으면 통합 테스트를 건너뛰지 않고 실패시킨다. CI에서 조용히 건너뛰면 고장을 놓친다.
+      REQUIRE_INTEGRATION: "1"
+    services:
+      postgres:
+        image: postgres:16.4
+        env:
+          POSTGRES_USER: sports
+          POSTGRES_PASSWORD: ci-only-throwaway
+          POSTGRES_DB: sports
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sports -d sports"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.lock
+
+      - name: Start S3-compatible object store (SeaweedFS)
+        run: |
+          docker run -d --name object-store -p 59000:8333 -e S3_ACCESS_KEY -e S3_SECRET_KEY \
+            --entrypoint /bin/sh chrislusf/seaweedfs:4.48 -c \
+            'printf "{\"identities\":[{\"name\":\"pipeline\",\"credentials\":[{\"accessKey\":\"%s\",\"secretKey\":\"%s\"}],\"actions\":[\"Admin\",\"Read\",\"List\",\"Tagging\",\"Write\"]}]}" "$S3_ACCESS_KEY" "$S3_SECRET_KEY" > /tmp/s3.json && exec weed server -dir=/data -volume.max=0 -master.volumeSizeLimitMB=256 -s3 -s3.port=8333 -s3.config=/tmp/s3.json'
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:59000/ || true)
+            [ "$code" != "000" ] && echo "S3 ready ($code)" && exit 0
+            sleep 2
+          done
+          docker logs object-store; exit 1
+
+      - name: Install app and pipeline dependencies
+        run: pip install -r requirements.lock
+
+      - name: Install dbt in a separate virtualenv
+        run: python -m venv .venv-dbt && .venv-dbt/bin/pip install -r requirements-dbt.lock
+
+      - name: Tests (unit + integration)
+        run: python -m pytest -q -rs
+
+      - name: End-to-end smoke run (fixture → Bronze/Silver → dbt Gold)
+        run: |
+          python -m pipelines.db migrate
+          python -m pipelines.ingest.openfootball --season 2025-26 --file tests/fixtures/openfootball_en1_sample.json
+          python -m pipelines.dbt_runner build

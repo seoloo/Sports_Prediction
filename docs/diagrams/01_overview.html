@@ -72,9 +72,9 @@
         <div class="tech-row"><div class="name">S3 · SeaweedFS<span>원본 저장 (Bronze)</span></div><div class="why">원본을 내용 해시 경로로 그대로 보존해 <b>언제든 다시 처리</b>. 표준 S3 API라 AWS S3로 그대로 이전 가능</div><span class="chip done">사용 중</span></div>
         <div class="tech-row"><div class="name">Kafka<span>스트리밍 수집</span></div><div class="why">결과 정정·배당 변경은 원래 <b>시간순 이벤트</b>입니다. 덮어쓰지 않는 버전 구조와 같은 모델이고, 과거 시즌을 다시 흘려 검증</div><span class="chip">예정</span></div>
         <div class="tech-row"><div class="name">Spark<span>대용량 처리</span></div><div class="why">여러 리그·시즌을 다시 계산하고 이벤트 단위 자료를 다루는 단계에서 <b>시점 기준 특징을 대량 계산</b></div><span class="chip">예정</span></div>
-        <div class="tech-row"><div class="name">dbt<span>변환·품질 테스트</span></div><div class="why">특징 테이블 정의와 품질 검사를 <b>코드로 관리하고 리뷰</b>하기 위해</div><span class="chip">예정</span></div>
-        <div class="tech-row"><div class="name">Airflow<span>오케스트레이션</span></div><div class="why">수집 → 정제 → 특징 → 학습 → 평가의 <b>순서·재시도·백필</b>을 자동화</div><span class="chip">예정</span></div>
-        <div class="tech-row"><div class="name">Docker · Kubernetes<span>실행 환경</span></div><div class="why">누구나 같은 환경을 <b>한 번에 재현</b>하고, 배포 구성까지 보여주기 위해</div><span class="chip">예정</span></div>
+        <div class="tech-row"><div class="name">dbt<span>변환·품질 테스트</span></div><div class="why">Gold 테이블 정의와 품질 검사를 <b>코드로 관리하고 리뷰</b>. 과거 기준 시각으로도 다시 계산</div><span class="chip done">사용 중</span></div>
+        <div class="tech-row"><div class="name">Airflow<span>오케스트레이션</span></div><div class="why">수집 → 정제 → 특징 → 학습 → 평가의 <b>순서·재시도·백필</b>을 자동화</div><span class="chip done">사용 중</span></div>
+        <div class="tech-row"><div class="name">Docker · Kubernetes<span>실행 환경</span></div><div class="why">누구나 같은 환경을 <b>한 번에 재현</b>(Docker 사용 중). 배포 구성은 Kubernetes로 4단계에서</div><span class="chip warn">일부 사용</span></div>
       </div>
     </div>
 
