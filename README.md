@@ -60,6 +60,21 @@ docker compose --env-file .env -f infra/docker-compose.yml up -d
 - 객체 저장소는 처음 계획한 MinIO 대신 SeaweedFS를 씁니다. MinIO 커뮤니티판의 Docker 이미지 배포가 중단되었기 때문입니다. 코드는 표준 S3 API(boto3)만 사용합니다.
 - 중지: `docker compose --env-file .env -f infra/docker-compose.yml down` (데이터 볼륨은 유지됩니다)
 
+### 배당 CSV 수집 (로드맵 1c)
+
+football-data.co.uk 약관상 자동 다운로드는 하지 않습니다. 사이트에서 England → 시즌별 Premier League CSV를 직접 내려받아 `data/landing/football-data-co-uk/`에 `E0_2025-26.csv`처럼 시즌을 붙여 저장합니다(`data/`는 Git 제외).
+
+~~~powershell
+.\.venv\Scripts\python.exe -m pipelines.ingest.football_data_co_uk
+~~~
+
+- 원본은 Bronze에 그대로 보존하고, 배당은 `silver.odds_revisions`에 경기 × 북메이커 × 시장(1X2·언더오버 2.5·아시안 핸디캡) × 선택지 × 시점(마감 전/마감) 단위 버전으로 쌓습니다. 값이 바뀐 배당만 새 버전이 생깁니다.
+- 시즌마다 열 구성이 달라 열 이름으로 배당을 찾습니다. 빈칸은 배당 없음, 0이나 잘못된 값은 품질 문제(`silver.quality_issues`)로 남깁니다.
+- 팀 이름은 [검토한 대조표](pipelines/mappings/team_aliases.csv)로만 연결합니다. 대조표 후보는 `--suggest-aliases`가 같은 날짜 경기 대조로 만들고, 사람이 검토해 파일에 옮깁니다.
+- openfootball과 날짜·점수가 다르면 덮어쓰지 않고 `DATE_MISMATCH`·`SCORE_MISMATCH`로 기록합니다.
+- Pinnacle(PS) 배당은 2025-07-23 이후 갱신 지연 안내가 있어 `caution` 표시를 붙입니다.
+- Airflow DAG도 경기 수집 뒤 이 폴더를 읽습니다. 새 CSV를 넣어 두면 다음 실행에 반영됩니다.
+
 ### Gold 변환과 오케스트레이션 (로드맵 1d)
 
 dbt는 Streamlit과 protobuf 버전이 충돌해 별도 가상환경(`.venv-dbt`)에 설치합니다.
@@ -73,6 +88,7 @@ py -3.12 -m venv .venv-dbt
 - `staging.stg_matches_known`: 기준 시각에 알려진 경기별 최신 버전(뷰)
 - `gold.team_match_results`: 끝난 경기를 팀 관점 2행으로 펼친 테이블
 - `gold.league_standings`: 리그·시즌별 순위표(승점 → 골득실 → 다득점 → 이름 순)
+- `gold.match_odds_1x2`: 경기 × 북메이커 × 시점별 1X2 배당, 오버라운드, 마진을 뺀 정규화 확률(모델 평가의 시장 기준선)
 - 품질 테스트: 유일성·필수값·허용값, 경기 수 = 승+무+패, 승점 = 3×승+무, 시즌 득점 합 = 실점 합, 끝난 경기마다 팀 행 2개
 - 과거 시점으로 다시 계산: `.\.venv\Scripts\python.exe -m pipelines.dbt_runner build --vars "{as_of: '2025-01-01T00:00:00Z'}"`
 
@@ -174,7 +190,7 @@ expected_revision_no는 앱의 현재 버전입니다. 최초 결과는 0, 결�
 
 ## 다음 개발
 
-첫 실제 종목은 해외축구(EPL부터)입니다. 이 저장소 안에서 Postgres·S3 호환 저장소·Kafka·Spark·Airflow 기반 데이터 파이프라인을 단계적으로 추가합니다. 단계와 기술 선택 이유는 [데이터 플랫폼 로드맵](docs/de_platform_roadmap.md), 소스별 사용 조건과 역할은 [해외축구 데이터 소스 검토](docs/football_data_sources.md)를 확인하세요. 1a(로컬 인프라), 1b(openfootball 배치 수집), 1d(dbt·Airflow·CI)는 구현했습니다. 남은 1단계 작업은 1c(직접 내려받은 배당 CSV 수집)입니다. 지금은 가상 자료와 구조 검증이며 실제 모델 성능 검증·전체 예외 규칙 검토는 완료하지 않았습니다.
+첫 실제 종목은 해외축구(EPL부터)입니다. 이 저장소 안에서 Postgres·S3 호환 저장소·Kafka·Spark·Airflow 기반 데이터 파이프라인을 단계적으로 추가합니다. 단계와 기술 선택 이유는 [데이터 플랫폼 로드맵](docs/de_platform_roadmap.md), 소스별 사용 조건과 역할은 [해외축구 데이터 소스 검토](docs/football_data_sources.md)를 확인하세요. 1단계(1a 로컬 인프라, 1b openfootball 수집, 1c 배당 CSV 수집, 1d dbt·Airflow·CI)를 모두 구현했습니다. 다음은 2단계(Kafka 스트리밍과 매치데이 자동 분석)이며 football-data.org API 키가 필요합니다. 지금은 가상 자료와 구조 검증이며 실제 모델 성능 검증·전체 예외 규칙 검토는 완료하지 않았습니다.
 
 
 화면 업로드와 테스트 구현은 [Streamlit 파일 업로드 문서](https://docs.streamlit.io/develop/api-reference/widgets/st.file_uploader)와 [앱 테스트 문서](https://docs.streamlit.io/develop/api-reference/app-testing)를 참고했습니다.

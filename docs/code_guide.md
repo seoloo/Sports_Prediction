@@ -27,9 +27,11 @@
 | [pipelines/sql/001_ingest_silver.sql](../pipelines/sql/001_ingest_silver.sql) | `ingest`·`silver` 스키마, 불변 트리거, 기준 시각 함수 | `silver.match_revisions_known_at` |
 | [pipelines/object_store.py](../pipelines/object_store.py) | S3 Bronze 저장(내용 해시 경로, 없을 때만 업로드) | `put_if_absent`, `read_object` |
 | [pipelines/ingest/openfootball.py](../pipelines/ingest/openfootball.py) | openfootball 수집: 정규화(순수 함수) → Bronze → Silver | `normalize_document`, `write_silver`, `ingest` |
+| [pipelines/ingest/football_data_co_uk.py](../pipelines/ingest/football_data_co_uk.py) | 직접 내려받은 배당 CSV: 열 이름 기반 파싱 → 대조표로 경기 연결 → COPY + 집합 연산으로 바뀐 배당만 버전 추가 | `parse_csv`, `link_fixtures`, `write_odds`, `suggest_aliases` |
+| [pipelines/mappings/team_aliases.csv](../pipelines/mappings/team_aliases.csv) | 검토한 팀 이름 대조표(같은 날짜 경기 근거) | — |
 | [pipelines/dbt_runner.py](../pipelines/dbt_runner.py) | `.env` 접속 정보를 넘겨 별도 가상환경의 dbt 실행 | `run_dbt` |
 | [pipelines/schedule.py](../pipelines/schedule.py) | 날짜 → 수집할 시즌 이름(순수 함수) | `seasons_for` |
-| [dbt/models/](../dbt/models/) | `staging.stg_matches_known` → `gold.team_match_results` → `gold.league_standings` | — |
+| [dbt/models/](../dbt/models/) | `staging.stg_matches_known` → `gold.team_match_results` → `gold.league_standings`, `staging.stg_odds_known` → `gold.match_odds_1x2` | — |
 | [dbt/tests/](../dbt/tests/) | 순위표 정합성·끝난 경기당 팀 행 2개 검사 | — |
 | [dags/openfootball_epl_daily.py](../dags/openfootball_epl_daily.py) | 매일 스키마 확인 → 시즌별 수집(동적 태스크) → dbt build | — |
 | [infra/airflow/Dockerfile](../infra/airflow/Dockerfile) | Airflow 3.3.2 이미지 + 파이프라인 라이브러리 + dbt 전용 가상환경 | — |

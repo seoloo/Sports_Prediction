@@ -8,3 +8,5 @@ sources:
       - name: matches
       - name: match_revisions
         description: 경기 내용의 버전. 수정·삭제는 DB 트리거가 막는다.
+      - name: odds_revisions
+        description: 배당의 버전(football-data.co.uk). 수정·삭제는 DB 트리거가 막는다.

@@ -24,7 +24,7 @@
   .band { border-radius: 12px; padding: 9px 14px; font-size: 13.5px; border: 1px dashed var(--line); background: #fbfcfe; color: #475467; }
   .band b { color: var(--ink); margin-right: 8px; }
   .stages { margin-top: 20px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; position: relative; }
-  .stages::before { content: ""; position: absolute; left: 30px; right: 30px; top: 21px; height: 4px; background: linear-gradient(90deg, var(--done) 0 28%, var(--primary) 28% 34%, var(--line) 34% 100%); border-radius: 2px; }
+  .stages::before { content: ""; position: absolute; left: 30px; right: 30px; top: 21px; height: 4px; background: linear-gradient(90deg, var(--done) 0 34%, var(--primary) 34% 56%, var(--line) 56% 100%); border-radius: 2px; }
   .stage { position: relative; padding: 0 10px; }
   .dot { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; background: #fff; border: 3px solid var(--line); color: var(--muted); position: relative; z-index: 1; }
   .stage.done .dot { border-color: var(--done); background: var(--done); color: #fff; }
@@ -49,7 +49,7 @@
       <div class="col">
         <div class="label">Sources</div>
         <div class="box done"><b>openfootball</b><span>CC0 · 일정·전후반 점수 자동 수집</span></div>
-        <div class="box next"><b>football-data.co.uk</b><span>마감 배당 · 직접 내려받은 CSV만</span></div>
+        <div class="box done"><b>football-data.co.uk</b><span>마감 배당 · 직접 내려받은 CSV만</span></div>
         <div class="box plan"><b>football-data.org</b><span>API · 분당 10회 · 키 필요</span></div>
       </div>
       <div class="col">
@@ -68,7 +68,7 @@
       </div>
       <div class="col">
         <div class="label">Gold</div>
-        <div class="box done"><b>dbt</b><span>순위표·팀별 경기 결과, 품질 테스트, as_of 재계산</span></div>
+        <div class="box done"><b>dbt</b><span>순위표·시장 내재 확률, 품질 테스트, as_of 재계산</span></div>
         <div class="box plan"><b>Spark</b><span>시점 기준 특징·백테스트 데이터셋 대량 계산</span></div>
       </div>
       <div class="col">
@@ -85,8 +85,8 @@
 
   <div class="stages">
     <div class="stage done"><div class="dot">0</div><h4>소스 검토 <span class="chip done">완료</span></h4><p>소스별 약관·역할 정리, 로드맵 작성</p></div>
-    <div class="stage next"><div class="dot">1</div><h4>배치 기반 <span class="chip next">진행 중</span></h4><p>✅ 1a Postgres·S3 · ✅ 1b openfootball 수집 · ✅ 1d dbt·Airflow·CI · 1c 배당 CSV</p><div class="need">1c 전: 배당 CSV 직접 다운로드</div></div>
-    <div class="stage"><div class="dot">2</div><h4>스트리밍·자동 분석</h4><p>Kafka, API 폴링 수집기, 마감 전 자동 스냅샷, 과거 시즌 재생, 중복·지연 처리</p><div class="need">football-data.org 키 필요</div></div>
+    <div class="stage done"><div class="dot">1</div><h4>배치 기반 <span class="chip done">완료</span></h4><p>Postgres·S3, openfootball·배당 CSV 수집, dbt 순위표·시장 확률, Airflow 매일 실행, CI</p></div>
+    <div class="stage next"><div class="dot">2</div><h4>스트리밍·자동 분석 <span class="chip next">다음</span></h4><p>Kafka, API 폴링 수집기, 마감 전 자동 스냅샷, 과거 시즌 재생, 중복·지연 처리</p><div class="need">football-data.org 키 필요</div></div>
     <div class="stage"><div class="dot">3</div><h4>모델·검증</h4><p>EPL 기준 모델, 시간순 백테스트, Log loss·Brier, 시장 배당 비교</p></div>
     <div class="stage"><div class="dot">4</div><h4>서빙·배포</h4><p>FastAPI, 모바일 화면, Kubernetes 배포, 모니터링</p><div class="need">외부 접속 방식 결정 필요</div></div>
   </div>

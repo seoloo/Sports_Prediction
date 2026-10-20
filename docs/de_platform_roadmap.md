@@ -55,7 +55,7 @@ Airflow가 전체 작업 순서와 재시도를 관리합니다.
 | 0. 소스 검토 | 소스 검토 문서, 이 로드맵 | 소스별 역할·제약 기록 | 없음 |
 | 1a. 로컬 인프라 ✅ | docker-compose(Postgres, SeaweedFS S3), 127.0.0.1 바인딩, `.env.example`, 무작위 비밀번호 생성 | `docker compose up` 후 상태 확인 통과 | 없음 |
 | 1b. openfootball 배치 수집 ✅ | Bronze 원본 저장, Silver 경기·결과 버전, 형식 차이 처리, 팀 별칭 | 중복 수집이 멱등, 결측 전반 점수 보존, 재수집 시 변경만 새 버전 | 없음 |
-| 1c. 배당 수집 | landing 폴더의 football-data.co.uk CSV를 Bronze·Silver로 | 수동 다운로드 파일만 처리, 원본 Git 제외 | CSV 수동 다운로드 |
+| 1c. 배당 수집 ✅ | landing 폴더의 football-data.co.uk CSV를 Bronze·Silver로 | 수동 다운로드 파일만 처리, 원본 Git 제외 | CSV 수동 다운로드 |
 | 1d. 품질·오케스트레이션 ✅ | dbt 모델과 테스트, Airflow DAG, CI | DAG 재실행 시 결과 동일, 테스트 통과 | 없음 |
 | 2. 스트리밍·매치데이 자동 분석 | Kafka, football-data.org 폴링 수집기, 과거 시즌 재생기, 수동 배당 이벤트, 마감 전 정해진 시각의 자동 스냅샷 | 이벤트 중복·지연 도착 처리, 분당 요청 제한 준수, 정해진 시각마다 스냅샷 누락 없음 | football-data.org 키 |
 | 3. 모델·검증 | EPL Poisson/Dixon-Coles 기준 모델, 시간순 백테스트, 시장 배당 비교, 모의 기록 | 누수 검사 통과, Log loss·Brier를 기준 모델·배당과 비교, 보류율 공개 | 없음 |
