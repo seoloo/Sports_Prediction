@@ -1,0 +1,56 @@
+# 로컬 데이터 플랫폼(로드맵 1a): PostgreSQL(Silver) + SeaweedFS S3(Bronze)
+# 실행: docker compose --env-file .env -f infra/docker-compose.yml up -d
+# 모든 포트는 127.0.0.1에만 열어 외부 네트워크에서 접속할 수 없게 한다.
+# 계정 정보는 .env(Git 제외)에서 읽는다. .env는 python -m pipelines.config init-env로 만든다.
+#
+# 객체 저장소를 MinIO 대신 SeaweedFS로 쓰는 이유: MinIO 커뮤니티판은 Docker Hub 이미지가 내려가고
+# 저장소가 보관(archived) 상태가 되었다. 코드는 표준 S3 API(boto3)만 쓰므로 다른 S3 호환 저장소로 바꿔도 된다.
+name: sports-prediction
+
+services:
+  postgres:
+    image: postgres:16.4
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?run python -m pipelines.config init-env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run python -m pipelines.config init-env}
+      POSTGRES_DB: ${POSTGRES_DB:-sports}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  object-store:
+    image: chrislusf/seaweedfs:4.48
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?run python -m pipelines.config init-env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?run python -m pipelines.config init-env}
+    # 시작할 때 환경 변수로 S3 계정 설정 파일을 만든 뒤 master·volume·filer·S3를 한 컨테이너로 띄운다.
+    # SeaweedFS는 버킷마다 볼륨을 여러 개 잡는다. 기본 상한(8개)으로는 버킷 2개만 만들어도 쓰기가 실패하므로
+    # 볼륨 수는 디스크 여유에 맞춰 자동 계산(-volume.max=0)하고, 볼륨 하나는 256MB로 작게 둔다.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        printf '{"identities":[{"name":"pipeline","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","List","Tagging","Write"]}]}'
+        "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" > /tmp/s3.json &&
+        exec weed server -dir=/data -volume.max=0 -master.volumeSizeLimitMB=256
+        -s3 -s3.port=8333 -s3.config=/tmp/s3.json
+    ports:
+      - "127.0.0.1:${S3_PORT:-59000}:8333"
+    volumes:
+      - object-store-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/cluster/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  object-store-data:
