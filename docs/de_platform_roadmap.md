@@ -23,7 +23,7 @@ openfootball(CC0) ──자동 수집──┐
 football-data.co.uk CSV ─수동 다운로드→ landing 폴더 ─┤
 football-data.org API ──폴링(2단계)── Kafka ─┤
                                          ↓
-                Bronze: MinIO 원본(파일 그대로 + 해시·received_at)
+                Bronze: S3 호환 저장소(SeaweedFS) 원본(파일 그대로 + 해시·received_at)
                                          ↓
                 Silver: 정규화 경기·결과 버전, 팀 별칭 매핑(Postgres)
                                          ↓
@@ -38,7 +38,7 @@ Airflow가 전체 작업 순서와 재시도를 관리합니다.
 | 역할 | 선택 | 이유 |
 |---|---|---|
 | 운영·분석 DB | PostgreSQL 16 | 버전 테이블, 트리거, 제약을 그대로 옮길 수 있고 dbt·Airflow와 호환 |
-| 원본 저장 | MinIO + Parquet | S3 호환 객체 저장소로 Bronze 원본 보존. 테이블 형식(Iceberg)은 Spark 단계에서 검토 |
+| 원본 저장 | SeaweedFS(S3 호환) | Bronze 원본을 내용 해시 경로로 보존. 코드는 표준 S3 API(boto3)만 써서 AWS S3 등으로 그대로 이전 가능. 처음 계획한 MinIO는 커뮤니티판 Docker 이미지 배포가 중단되고 저장소가 보관(archived)되어 2026-10-20에 교체. Parquet·테이블 형식(Iceberg)은 Gold·Spark 단계에서 도입 |
 | 스트리밍 | Apache Kafka(KRaft 모드) | 결과 정정·배당 변경·일정 변경을 추가 전용 이벤트로 다룸. 과거 시즌 재생으로 스트리밍 처리 검증 |
 | 대용량 처리 | Apache Spark | 여러 리그·시즌 재처리, StatsBomb 이벤트 수준 데이터(연구 전용) 처리 |
 | 변환·품질 | dbt + 테스트 | Gold 모델 정의와 품질 검사를 코드로 관리 |
@@ -53,8 +53,8 @@ Airflow가 전체 작업 순서와 재시도를 관리합니다.
 | 단계 | 결과물 | 완료 기준 | 사용자 선행 조건 |
 |---|---|---|---|
 | 0. 소스 검토 | 소스 검토 문서, 이 로드맵 | 소스별 역할·제약 기록 | 없음 |
-| 1a. 로컬 인프라 | docker-compose(Postgres, MinIO), 127.0.0.1 바인딩, `.env.example` | `docker compose up` 후 상태 확인 통과 | 없음 |
-| 1b. openfootball 배치 수집 | Bronze 원본 저장, Silver 경기·결과 버전, 형식 차이 처리, 팀 별칭 | 중복 수집이 멱등, 결측 전반 점수 보존, 재수집 시 변경만 새 버전 | 없음 |
+| 1a. 로컬 인프라 ✅ | docker-compose(Postgres, SeaweedFS S3), 127.0.0.1 바인딩, `.env.example`, 무작위 비밀번호 생성 | `docker compose up` 후 상태 확인 통과 | 없음 |
+| 1b. openfootball 배치 수집 ✅ | Bronze 원본 저장, Silver 경기·결과 버전, 형식 차이 처리, 팀 별칭 | 중복 수집이 멱등, 결측 전반 점수 보존, 재수집 시 변경만 새 버전 | 없음 |
 | 1c. 배당 수집 | landing 폴더의 football-data.co.uk CSV를 Bronze·Silver로 | 수동 다운로드 파일만 처리, 원본 Git 제외 | CSV 수동 다운로드 |
 | 1d. 품질·오케스트레이션 | dbt 모델과 테스트, Airflow DAG, CI | DAG 재실행 시 결과 동일, 테스트 통과 | 없음 |
 | 2. 스트리밍·매치데이 자동 분석 | Kafka, football-data.org 폴링 수집기, 과거 시즌 재생기, 수동 배당 이벤트, 마감 전 정해진 시각의 자동 스냅샷 | 이벤트 중복·지연 도착 처리, 분당 요청 제한 준수, 정해진 시각마다 스냅샷 누락 없음 | football-data.org 키 |

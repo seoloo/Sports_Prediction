@@ -38,6 +38,29 @@ py -3.12 -m venv .venv
 
 requirements.lock은 이번에 검증한 Python 3.12 실행·테스트 환경의 버전 목록입니다. 직접 의존성은 requirements.txt, 테스트 의존성은 requirements-dev.txt에 있습니다.
 
+## 데이터 플랫폼 실행 (로드맵 1a·1b)
+
+Docker Desktop을 실행한 상태에서 저장소 폴더에서 실행합니다. 처음 한 번만 `init-env`로 무작위 비밀번호가 들어간 `.env`(Git 제외)를 만듭니다.
+
+~~~powershell
+.\.venv\Scripts\python.exe -m pipelines.config init-env
+docker compose --env-file .env -f infra/docker-compose.yml up -d
+.\.venv\Scripts\python.exe -m pipelines.db migrate
+.\.venv\Scripts\python.exe -m pipelines.ingest.openfootball --season 2025-26
+~~~
+
+| 서비스 | 주소 | 역할 |
+|---|---|---|
+| PostgreSQL 16.4 | 127.0.0.1:55432 | `ingest` 스키마(소스·실행·원본 파일·수집 기록), `silver` 스키마(팀·경기·경기 버전·품질 문제) |
+| SeaweedFS 4.48 (S3 API) | 127.0.0.1:59000 | `bronze` 버킷에 원본 JSON을 `openfootball/en.1/2025-26/sha256=….json` 경로로 보존 |
+
+- 같은 시즌을 여러 번 수집해도 원본·경기 버전은 늘지 않고 수집 기록(`ingest.fetches`)만 쌓입니다. 점수·일정이 바뀐 경기만 새 버전이 생깁니다.
+- openfootball은 발표 시각을 주지 않아 `published_at`은 비워 두고, 경기 시각은 리그 현지 시간대(EPL은 Europe/London)로 해석했다는 표시(`timezone_assumed`)를 남깁니다.
+- 기준 시각 조회: `SELECT * FROM silver.match_revisions_known_at('2026-01-01T00:00:00Z');`
+- 객체 저장소는 처음 계획한 MinIO 대신 SeaweedFS를 씁니다. MinIO 커뮤니티판의 Docker 이미지 배포가 중단되었기 때문입니다. 코드는 표준 S3 API(boto3)만 사용합니다.
+- 중지: `docker compose --env-file .env -f infra/docker-compose.yml down` (데이터 볼륨은 유지됩니다)
+- 통합 테스트(`tests/test_pipeline_integration.py`)는 서비스가 켜져 있을 때만 실행되고, 임시 DB와 테스트 전용 버킷을 쓴 뒤 정리합니다. 서비스가 꺼져 있으면 건너뜁니다.
+
 ## 처음 사용하는 순서
 
 1. **데이터 소스:** 직접 작성한 자료 또는 로컬 저장 사용권이 확인된 자료의 소스 ID·이름·출처·확인 근거를 등록합니다. 권한 확인 체크가 없는 소스는 PENDING이며 입력에 사용할 수 없습니다. 소스 설정은 보존하므로 조건 변경은 새 ID로 등록합니다.
@@ -123,7 +146,7 @@ expected_revision_no는 앱의 현재 버전입니다. 최초 결과는 0, 결�
 
 ## 다음 개발
 
-첫 실제 종목은 해외축구(EPL부터)입니다. 이 저장소 안에서 Postgres·MinIO·Kafka·Spark·Airflow 기반 데이터 파이프라인을 단계적으로 추가합니다. 단계와 기술 선택 이유는 [데이터 플랫폼 로드맵](docs/de_platform_roadmap.md), 소스별 사용 조건과 역할은 [해외축구 데이터 소스 검토](docs/football_data_sources.md)를 확인하세요. 다음 구현 묶음은 로컬 인프라(Postgres, MinIO)와 openfootball(CC0) 일정·결과 배치 수집입니다. 지금은 가상 자료와 구조 검증이며 실제 모델 성능 검증·전체 예외 규칙 검토는 완료하지 않았습니다.
+첫 실제 종목은 해외축구(EPL부터)입니다. 이 저장소 안에서 Postgres·S3 호환 저장소·Kafka·Spark·Airflow 기반 데이터 파이프라인을 단계적으로 추가합니다. 단계와 기술 선택 이유는 [데이터 플랫폼 로드맵](docs/de_platform_roadmap.md), 소스별 사용 조건과 역할은 [해외축구 데이터 소스 검토](docs/football_data_sources.md)를 확인하세요. 1a(로컬 인프라)와 1b(openfootball 배치 수집)는 구현했습니다. 다음 구현 묶음은 1c(직접 내려받은 배당 CSV 수집)와 1d(dbt·Airflow·CI)입니다. 지금은 가상 자료와 구조 검증이며 실제 모델 성능 검증·전체 예외 규칙 검토는 완료하지 않았습니다.
 
 
 화면 업로드와 테스트 구현은 [Streamlit 파일 업로드 문서](https://docs.streamlit.io/develop/api-reference/widgets/st.file_uploader)와 [앱 테스트 문서](https://docs.streamlit.io/develop/api-reference/app-testing)를 참고했습니다.

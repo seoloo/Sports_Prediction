@@ -1,0 +1,17 @@
+{
+  "name": "Sample League (openfootball format)",
+  "matches": [
+    {"round": "Matchday 1", "date": "2025-08-16", "time": "15:00", "team1": "Alpha FC", "team2": "Beta FC",
+     "score": {"ht": [1, 0], "ft": [2, 1]}},
+    {"round": "Matchday 1", "date": "2025-08-16", "time": "17:30", "team1": "Gamma FC", "team2": "Delta FC",
+     "score": [0, 0]},
+    {"round": "Matchday 2", "date": "2025-12-26", "time": "12:30", "team1": "Beta FC", "team2": "Gamma FC",
+     "score": {"ft": [3, 2]}},
+    {"round": "Matchday 2", "date": "2026-05-24", "time": "16:00", "team1": "Delta FC", "team2": "Alpha FC"},
+    {"round": "Matchday 3", "date": "2026-05-24", "team1": "Alpha FC", "team2": "Gamma FC"},
+    {"round": "Matchday 3", "date": "2025-09-01", "time": "20:00", "team1": "Delta FC", "team2": "Beta FC",
+     "score": {"ht": [2, 0], "ft": [1, 0]}},
+    {"round": "Matchday 3", "date": "2025-09-02", "time": "20:00", "team1": "Alpha FC", "team2": "Beta FC",
+     "score": [1, 1]}
+  ]
+}

@@ -17,6 +17,32 @@
 
 화면 파일(`app.py`, `*_pages.py`)은 입력을 받아 위 모듈 함수를 부르고 결과를 표로 보여주기만 합니다. 검사·저장 규칙은 화면 밖에 있습니다.
 
+### 데이터 플랫폼 (pipelines/)
+
+| 파일 | 역할 | 대표 함수 |
+|---|---|---|
+| [infra/docker-compose.yml](../infra/docker-compose.yml) | PostgreSQL·SeaweedFS(S3) 컨테이너, 127.0.0.1 포트 | — |
+| [pipelines/config.py](../pipelines/config.py) | `.env` 읽기, 무작위 비밀번호로 `.env` 만들기 | `load_settings`, `init_env` |
+| [pipelines/db.py](../pipelines/db.py) | Postgres 연결, `sql/NNN_*.sql` 순서 적용 | `connect`, `migrate` |
+| [pipelines/sql/001_ingest_silver.sql](../pipelines/sql/001_ingest_silver.sql) | `ingest`·`silver` 스키마, 불변 트리거, 기준 시각 함수 | `silver.match_revisions_known_at` |
+| [pipelines/object_store.py](../pipelines/object_store.py) | S3 Bronze 저장(내용 해시 경로, 없을 때만 업로드) | `put_if_absent`, `read_object` |
+| [pipelines/ingest/openfootball.py](../pipelines/ingest/openfootball.py) | openfootball 수집: 정규화(순수 함수) → Bronze → Silver | `normalize_document`, `write_silver`, `ingest` |
+
+## 흐름 0: openfootball 한 시즌을 수집할 때
+
+```text
+ingest(season, league)
+ ├ ingest.runs에 RUNNING 기록
+ ├ 원본 내려받기 → SHA-256 → S3 Bronze에 없을 때만 업로드
+ ├ normalize_document(순수 함수)
+ │   ├ score: 객체 {ft, ht} / 배열 [h, a] / 없음 → 전반 점수 모르면 None(0으로 채우지 않음)
+ │   ├ 현지 시각 + 리그 시간대 → UTC, 존재하지 않는 서머타임 시각은 거부
+ │   └ 실패 레코드 → QualityIssue(이유 코드)
+ ├ 한 트랜잭션: raw_files(같은 내용이면 기존 행) + fetches + write_silver + quality_issues
+ │   └ write_silver: 경기별 직전 버전과 내용 해시가 다를 때만 다음 버전 추가
+ └ ingest.runs를 SUCCEEDED(통계) 또는 FAILED(오류)로 갱신
+```
+
 ## 흐름 1: CSV 한 파일을 저장할 때
 
 ```text
