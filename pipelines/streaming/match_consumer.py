@@ -1,4 +1,3 @@
-"""경기 이벤트 소비자 → silver.live_match_revisions(로드맵 2c).
 
 이벤트 하나를 처리하는 규칙(handle_match_event)
 1. 형식이 틀리거나 팀이 대조표에 없으면 저장하지 않고 silver.stream_rejections에 이유를 남긴다.
@@ -24,7 +23,7 @@ from ..db import connect, migrate
 from . import events, kafka_io
 
 GROUP_ID = "silver-match-writer"
-TOPICS = ["fdorg.matches.v1"]
+# 이 소비자가 읽는 토픽. 토픽마다 처리 함수가 다르다(dispatch_handler).
 CONTENT_FIELDS = ("status", "utc_kickoff", "matchday", "ht_home", "ht_away", "ft_home", "ft_away", "duration")
 
 
@@ -93,8 +92,13 @@ def handle_match_event(conn: psycopg.Connection, raw: bytes, *, topic: str, part
     return "INSERTED"
 
 
+def dispatch_handler(topic: str, settings=None):
+        from functools import partial
+    return handle_match_event
+
+
 def run(*, topics=None, group_id: str = GROUP_ID, settings=None, until_idle: bool = False, idle_polls: int = 5,
-        handler=handle_match_event, alias_file=ALIAS_FILE) -> dict:
+        handler=None, alias_file=ALIAS_FILE) -> dict:
     """토픽을 읽어 Silver에 반영한다. until_idle=True이면 새 메시지가 idle_polls번 연속 없을 때 멈춘다(테스트·재생용)."""
     settings = settings or load_settings()
     kafka_io.ensure_topics(settings)
@@ -119,8 +123,9 @@ def run(*, topics=None, group_id: str = GROUP_ID, settings=None, until_idle: boo
                     for message in messages:
                         if message.error():
                             raise RuntimeError(message.error())
-                        outcome = handler(conn, message.value(), topic=message.topic(), partition=message.partition(),
-                                          offset=message.offset(), now=now)
+                        handle = handler or dispatch_handler(message.topic(), settings)
+                        outcome = handle(conn, message.value(), topic=message.topic(), partition=message.partition(),
+                                         offset=message.offset(), now=now)
                         counts[outcome] = counts.get(outcome, 0) + 1
                 kafka_consumer.commit(asynchronous=False)
     finally:
@@ -129,9 +134,7 @@ def run(*, topics=None, group_id: str = GROUP_ID, settings=None, until_idle: boo
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="경기 이벤트를 Silver(live_match_revisions)에 반영합니다.")
     parser.add_argument("--until-idle", action="store_true", help="새 메시지가 없으면 종료")
-    parser.add_argument("--topic", action="append", help="읽을 토픽(여러 번 지정 가능). 기본 fdorg.matches.v1")
     parser.add_argument("--group", default=GROUP_ID)
     args = parser.parse_args(argv)
     print(json.dumps(run(topics=args.topic, group_id=args.group, until_idle=args.until_idle), ensure_ascii=False))
