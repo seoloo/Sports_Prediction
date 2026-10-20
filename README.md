@@ -109,7 +109,7 @@ expected_revision_no는 앱의 현재 버전입니다. 최초 결과는 0, 결�
 
 ## 다음 개발
 
-다음 묶음은 시간순 학습·평가에 사용할 데이터셋 생성과 표본·누수 검증 보고서입니다. 실제 리그를 정하고 로컬 저장·학습 사용권, 참가자/리그 식별, 결과 기간·단위·규칙 집단과 발표/확보 시각을 검토해야 합니다. 그 뒤 축구 등 한 종목의 기준 모델부터 학습·평가를 연결합니다. 지금은 가상 자료와 구조 검증이며 실제 데이터 라이선스 확보·모델 성능 검증·전체 예외 규칙 검토는 완료하지 않았습니다.
+첫 실제 종목은 해외축구(EPL부터)입니다. 이 저장소 안에서 Postgres·MinIO·Kafka·Spark·Airflow 기반 데이터 파이프라인을 단계적으로 추가합니다. 단계와 기술 선택 이유는 [데이터 플랫폼 로드맵](docs/de_platform_roadmap.md), 소스별 사용 조건과 역할은 [해외축구 데이터 소스 검토](docs/football_data_sources.md)를 확인하세요. 다음 구현 묶음은 로컬 인프라(Postgres, MinIO)와 openfootball(CC0) 일정·결과 배치 수집입니다. 지금은 가상 자료와 구조 검증이며 실제 모델 성능 검증·전체 예외 규칙 검토는 완료하지 않았습니다.
 
 
 화면 업로드와 테스트 구현은 [Streamlit 파일 업로드 문서](https://docs.streamlit.io/develop/api-reference/widgets/st.file_uploader)와 [앱 테스트 문서](https://docs.streamlit.io/develop/api-reference/app-testing)를 참고했습니다.
