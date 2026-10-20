@@ -29,11 +29,19 @@
 | [pipelines/ingest/openfootball.py](../pipelines/ingest/openfootball.py) | openfootball 수집: 정규화(순수 함수) → Bronze → Silver | `normalize_document`, `write_silver`, `ingest` |
 | [pipelines/ingest/football_data_co_uk.py](../pipelines/ingest/football_data_co_uk.py) | 직접 내려받은 배당 CSV: 열 이름 기반 파싱 → 대조표로 경기 연결 → COPY + 집합 연산으로 바뀐 배당만 버전 추가 | `parse_csv`, `link_fixtures`, `write_odds`, `suggest_aliases` |
 | [pipelines/mappings/team_aliases.csv](../pipelines/mappings/team_aliases.csv) | 검토한 팀 이름 대조표(같은 날짜 경기 근거) | — |
+| [pipelines/aliases.py](../pipelines/aliases.py) | 검토한 팀 대조표 읽기·반영(소스 공통) | `load_alias_file`, `sync_aliases` |
+| [pipelines/ingest/football_data_org.py](../pipelines/ingest/football_data_org.py) | API 수집기: 요청 한도·429 처리, Bronze 보존, 바뀐 경우에만 이벤트 발행, 조회 간격 자동 조절 | `RateLimiter`, `fetch_json`, `poll_once`, `next_poll_interval` |
+| [pipelines/streaming/events.py](../pipelines/streaming/events.py) | 이벤트 겉봉투(내용 해시 event_id, published_at·observed_at) | `build_event`, `decode` |
+| [pipelines/streaming/kafka_io.py](../pipelines/streaming/kafka_io.py) | 토픽 생성, 멱등 생산자, 수동 커밋 소비자 | `ensure_topics`, `producer`, `consumer` |
+| [pipelines/streaming/match_consumer.py](../pipelines/streaming/match_consumer.py) | 소비자: 중복·늦은 이벤트 처리, DB 커밋 후 오프셋 커밋, 토픽별 처리 함수 | `handle_match_event`, `run` |
+| [pipelines/streaming/replay.py](../pipelines/streaming/replay.py) | 과거 시즌 재생 + 장애 주입 + 최종 상태 검증 | `inject_faults`, `replay_season` |
+| [pipelines/snapshots.py](../pipelines/snapshots.py) | 경기 시작 24·3·1시간 전 입력 스냅샷(놓친 시점은 MISSED) | `decide`, `build_inputs`, `run` |
 | [pipelines/dbt_runner.py](../pipelines/dbt_runner.py) | `.env` 접속 정보를 넘겨 별도 가상환경의 dbt 실행 | `run_dbt` |
 | [pipelines/schedule.py](../pipelines/schedule.py) | 날짜 → 수집할 시즌 이름(순수 함수) | `seasons_for` |
 | [dbt/models/](../dbt/models/) | `staging.stg_matches_known` → `gold.team_match_results` → `gold.league_standings`, `staging.stg_odds_known` → `gold.match_odds_1x2` | — |
 | [dbt/tests/](../dbt/tests/) | 순위표 정합성·끝난 경기당 팀 행 2개 검사 | — |
-| [dags/openfootball_epl_daily.py](../dags/openfootball_epl_daily.py) | 매일 스키마 확인 → 시즌별 수집(동적 태스크) → dbt build | — |
+| [dags/openfootball_epl_daily.py](../dags/openfootball_epl_daily.py) | 매일 스키마 확인 → 시즌별 수집(동적 태스크) → 배당 CSV 수집 → dbt build | — |
+| [dags/prematch_snapshots.py](../dags/prematch_snapshots.py) | 30분마다 경기 전 스냅샷 | — |
 | [infra/airflow/Dockerfile](../infra/airflow/Dockerfile) | Airflow 3.3.2 이미지 + 파이프라인 라이브러리 + dbt 전용 가상환경 | — |
 | [.github/workflows/ci.yml](../.github/workflows/ci.yml) | CI: Postgres·SeaweedFS를 띄워 전체 테스트와 종단 실행 | — |
 
@@ -119,3 +127,19 @@ DB 테이블·열 이름, 스냅샷 JSON 키(`observations`, `exclusions`, `excl
 | `result_examples`, `correction_template` | `demo_result_rows`, `record_correction_template_rows` |
 | `sample_rows`, `load_demo` | `demo_csv_rows`, `load_demo_data` |
 | `catalog_page`, `import_page`, `manual_page`, `history_page` (app.py) | `all_events_page`, `csv_import_page`, `manual_entry_page`, `import_history_page` |
+
+## 흐름 3: 스트리밍 이벤트 하나가 Silver에 들어갈 때
+
+```text
+fdorg-poller: poll_once
+ ├ RateLimiter.wait → fetch_json(429면 초기화 시간만큼 대기 후 재시도)
+ ├ 응답 원본 → Bronze(S3, 내용 해시 경로) + ingest.raw_files·fetches
+ └ 내용이 바뀐 경우에만 경기별 build_event → Kafka(키 = 경기 ID, 같은 경기는 같은 파티션)
+stream-consumer: run
+ ├ 묶음(최대 500건)을 한 DB 트랜잭션으로 처리
+ │   └ handle_match_event: 형식 → 팀 대조 → 경기 연결(없으면 생성)
+ │       → 내용 같음/이미 반영한 event_id = DUPLICATE
+ │       → 최신보다 이른 published_at = STALE_EVENT(stream_rejections)
+ │       → 그 밖에는 live_match_revisions 다음 버전
+ └ DB 커밋 → Kafka 오프셋 커밋(중간에 죽으면 다시 받아도 결과는 같다)
+```

@@ -34,32 +34,32 @@
     <div>
       <div class="eyebrow">Matchday Automation · Near Real-time</div>
       <h1>매주 경기에 맞춰 스스로 도는 분석</h1>
-      <div class="subtitle">일정·배당·결과가 들어오는 대로 분 단위로 갱신합니다. 사람이 매번 실행하지 않아도 마감 전 예측과 경기 후 검증이 쌓입니다.</div>
+      <div class="subtitle">일정·배당·결과가 들어오는 대로 분 단위로 갱신합니다. 사람이 매번 실행하지 않아도 경기 전 입력과 경기 후 결과가 쌓입니다.</div>
     </div>
-    <div class="stamp legend"><span class="chip next">● 마감 전: 예측</span><span class="chip done">● 경기 후: 검증</span><span class="chip">로드맵 2단계</span></div>
+    <div class="stamp legend"><span class="chip next">● 경기 전: 입력 고정</span><span class="chip done">● 경기 후: 검증</span><span class="chip done">구현</span><span class="chip">3·4단계 예정</span></div>
   </div>
 
   <div class="cycle">
     <div class="rail"></div>
+    <div class="deadline"><span>경기 시작</span></div>
 
     <div class="node"><div class="when">매일</div><div class="dot"></div>
-      <div class="card"><h3>일정 수집</h3><p>다음 경기 일정과 일정 변경을 가져와 새 버전으로 저장</p><div class="by"><span class="code">Airflow</span></div></div></div>
-    <div class="node"><div class="when">마감 24시간 전</div><div class="dot"></div>
-      <div class="card"><h3>첫 스냅샷</h3><p>그 시점에 알려진 일정·기록·배당만으로 입력과 특징을 고정해 저장</p><div class="by"><span class="code">Airflow</span></div></div></div>
+      <div class="card"><h3>일정 수집 <span class="chip done" style="font-size:11px;padding:2px 8px">구현</span></h3><p>다음 경기 일정과 일정 변경을 가져와 새 버전으로 저장</p><div class="by"><span class="code">Airflow</span></div></div></div>
+    <div class="node"><div class="when">시작 24시간 전</div><div class="dot"></div>
+      <div class="card"><h3>첫 스냅샷 <span class="chip done" style="font-size:11px;padding:2px 8px">구현</span></h3><p>그 시점에 알려진 경기 정보·최근 5경기·배당만으로 입력을 고정해 저장</p><div class="by"><span class="code">Airflow</span></div></div></div>
     <div class="node"><div class="when">입력이 바뀔 때</div><div class="dot"></div>
-      <div class="card"><h3>변경 반영</h3><p>배당·라인업·일정 변경 이벤트를 받으면 스냅샷을 하나 더 추가</p><div class="by"><span class="code">Kafka</span></div></div></div>
-    <div class="node"><div class="when">마감 3시간·1시간 전</div><div class="dot"></div>
-      <div class="card"><h3>마지막 스냅샷</h3><p>마감 직전 정보까지 반영한 최종 예측 입력. 이후에는 사전 예측으로 인정하지 않음</p><div class="by"><span class="code">Airflow</span></div></div></div>
+    <div class="node"><div class="when">시작 3시간·1시간 전</div><div class="dot"></div>
+      <div class="card"><h3>마지막 스냅샷 <span class="chip done" style="font-size:11px;padding:2px 8px">구현</span></h3><p>시작 직전 정보까지 반영한 입력. 90분 안에 못 찍으면 MISSED로 남기고 채우지 않음</p><div class="by"><span class="code">Airflow</span></div></div></div>
     <div class="node post"><div class="when">경기 중</div><div class="dot"></div>
-      <div class="card"><h3>결과 폴링</h3><p>대회별로 묶어 수 분 간격 조회. 분당 10회 요청 한도를 지키고 429 응답이면 대기</p><div class="by"><span class="code">Kafka</span></div></div></div>
+      <div class="card"><h3>결과 폴링 <span class="chip done" style="font-size:11px;padding:2px 8px">구현</span></h3><p>대회별로 묶어 수 분 간격 조회. 분당 10회 요청 한도를 지키고 429 응답이면 대기</p><div class="by"><span class="code">Kafka</span></div></div></div>
     <div class="node post"><div class="when">경기 종료 후</div><div class="dot"></div>
-      <div class="card"><h3>확정·대조</h3><p>결과 버전을 저장하고 공식 결과와 대조한 뒤 마감 전 예측을 채점</p><div class="by"><span class="code">Kafka</span><span class="code">Postgres</span></div></div></div>
+      <div class="card"><h3>확정·채점 <span class="chip" style="font-size:11px;padding:2px 8px">채점 3단계</span></h3><p>결과 버전 저장은 구현. 경기 전 예측 채점은 모델이 생기는 3단계에서</p><div class="by"><span class="code">Kafka</span><span class="code">Postgres</span></div></div></div>
     <div class="node post"><div class="when">매주</div><div class="dot"></div>
-      <div class="card"><h3>성능 보고서</h3><p>Log loss·Brier·보류율을 기준 모델·시장 배당과 비교하고 휴대폰으로 알림</p><div class="by"><span class="code">Airflow</span><span class="code">dbt</span></div></div></div>
+      <div class="card"><h3>성능 보고서 <span class="chip" style="font-size:11px;padding:2px 8px">3·4단계</span></h3><p>Log loss·Brier·보류율을 기준 모델·시장 배당과 비교하고 휴대폰으로 알림</p><div class="by"><span class="code">Airflow</span><span class="code">dbt</span></div></div></div>
   </div>
 
   <div class="bottom">
-    <div class="card why"><h3>왜 자동화가 필요한가</h3><p>과거 자료로 다시 만든 백테스트는 실제 수집 지연을 재현하지 못합니다. <b>마감 전에 실제로 저장한 예측</b>이 매주 쌓여야 모델 성능을 정직하게 말할 수 있습니다. 놓친 스냅샷은 나중에 만들지 않고 누락으로 기록합니다.</p></div>
+    <div class="card why"><h3>왜 자동화가 필요한가</h3><p>과거 자료로 다시 만든 백테스트는 실제 수집 지연을 재현하지 못합니다. <b>경기 전에 실제로 저장한 입력과 예측</b>이 매주 쌓여야 모델 성능을 정직하게 말할 수 있습니다. 놓친 스냅샷은 나중에 만들지 않고 누락으로 기록합니다.</p></div>
     <div class="card"><h3>범위와 한계</h3><ul>
       <li>경기 중 실시간(인플레이) 예측은 하지 않습니다. 허용 조건이 확인된 경기 중 데이터가 없습니다.</li>
       <li>무료 API의 요청 한도와 갱신 지연 때문에 초 단위가 아닌 분 단위입니다.</li>

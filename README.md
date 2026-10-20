@@ -105,6 +105,26 @@ docker compose --env-file .env -f infra/docker-compose.yml exec airflow cat /opt
 - CI(`.github/workflows/ci.yml`)는 GitHub에 푸시하면 Postgres·SeaweedFS를 띄워 전체 테스트와 수집→dbt 종단 실행을 합니다.
 - 통합 테스트(`tests/test_pipeline_integration.py`)는 서비스가 켜져 있을 때만 실행되고, 임시 DB와 테스트 전용 버킷을 쓴 뒤 정리합니다. 서비스가 꺼져 있으면 건너뜁니다.
 
+### 스트리밍과 매치데이 자동 분석 (로드맵 2단계)
+
+Football data provided by the Football-Data.org API.
+
+Kafka(127.0.0.1:59092)는 기본 서비스로 함께 뜹니다. 상시 실행 수집기·소비자는 `streaming` 프로필로 띄웁니다. `.env`에 `FOOTBALL_DATA_ORG_API_KEY`가 필요합니다.
+
+~~~powershell
+docker compose --env-file .env -f infra/docker-compose.yml --profile streaming up -d --build
+~~~
+
+| 구성 | 하는 일 |
+|---|---|
+| `fdorg-poller` | football-data.org를 경기 상황에 맞춘 간격(경기 중 2분, 24시간 안 경기 있으면 15분, 평소 6시간)으로 조회. 분당 10회 한도와 429 응답을 지키고, 원본은 Bronze에 두고, 내용이 바뀐 경우에만 경기별 이벤트를 `fdorg.matches.v1`로 보냄 |
+| Gold | `stg_matches_known`이 football-data.org 버전을 우선 쓰고 없으면 openfootball을 씀(`fixture_source` 열) |
+| Airflow `prematch_snapshots` | 30분마다 경기 시작 24·3·1시간 전 입력(경기 정보, 양 팀 최근 5경기, 배당)을 `snapshots.prematch_inputs`에 고정. 90분 안에 못 찍은 시점은 MISSED로 남기고 나중에 채우지 않음 |
+
+- 한 번만 조회·반영: `.\.venv\Scripts\python.exe -m pipelines.ingest.football_data_org --once` 다음 `.\.venv\Scripts\python.exe -m pipelines.streaming.match_consumer --until-idle`
+- 과거 시즌 재생(중복·늦은 이벤트를 섞어 소비자 검증, 별도 `sports_replay` DB 사용): `.\.venv\Scripts\python.exe -m pipelines.streaming.replay --season 2025-26`
+- 경기 중 실시간(인플레이) 예측은 하지 않습니다. 무료 API라 초 단위가 아니라 분 단위입니다. PC와 Docker Desktop이 켜져 있을 때만 돕니다.
+
 ## 처음 사용하는 순서
 
 1. **데이터 소스:** 직접 작성한 자료 또는 로컬 저장 사용권이 확인된 자료의 소스 ID·이름·출처·확인 근거를 등록합니다. 권한 확인 체크가 없는 소스는 PENDING이며 입력에 사용할 수 없습니다. 소스 설정은 보존하므로 조건 변경은 새 ID로 등록합니다.
@@ -190,7 +210,6 @@ expected_revision_no는 앱의 현재 버전입니다. 최초 결과는 0, 결�
 
 ## 다음 개발
 
-첫 실제 종목은 해외축구(EPL부터)입니다. 이 저장소 안에서 Postgres·S3 호환 저장소·Kafka·Spark·Airflow 기반 데이터 파이프라인을 단계적으로 추가합니다. 단계와 기술 선택 이유는 [데이터 플랫폼 로드맵](docs/de_platform_roadmap.md), 소스별 사용 조건과 역할은 [해외축구 데이터 소스 검토](docs/football_data_sources.md)를 확인하세요. 1단계(1a 로컬 인프라, 1b openfootball 수집, 1c 배당 CSV 수집, 1d dbt·Airflow·CI)를 모두 구현했습니다. 다음은 2단계(Kafka 스트리밍과 매치데이 자동 분석)이며 football-data.org API 키가 필요합니다. 지금은 가상 자료와 구조 검증이며 실제 모델 성능 검증·전체 예외 규칙 검토는 완료하지 않았습니다.
 
 
 화면 업로드와 테스트 구현은 [Streamlit 파일 업로드 문서](https://docs.streamlit.io/develop/api-reference/widgets/st.file_uploader)와 [앱 테스트 문서](https://docs.streamlit.io/develop/api-reference/app-testing)를 참고했습니다.

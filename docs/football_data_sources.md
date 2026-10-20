@@ -8,7 +8,7 @@
 |---|---|---|---|---|
 | [openfootball/football.json](https://github.com/openfootball/football.json) | 주요 유럽 리그 일정·전후반 점수(2010-11~) | CC0 1.0 공개 도메인. 제한 없음 | 일정·결과의 기본 수집원, 자동 수집, 테스트 샘플 저장 | 사용 중(EPL 2021-22~2026-27) |
 | [football-data.co.uk](https://www.football-data.co.uk/data.php) | 22개 유럽 리그 결과·경기 통계·마감 배당, 16개 기타 리그 | 개인 사용 목적, 리그 경기 예측 목적. 상업 서비스·데이터 학습 상품·자동 수집 봇 금지. 정확성 비보장 | 배당 기준선, 과거 백테스트 | 사용 중(직접 내려받은 EPL 2021-22~2026-27 CSV, 2026-10-21) |
-| [football-data.org](https://www.football-data.org/coverage) API | 무료 12개 대회 일정·결과·순위 | 계정 등록 필요, 분당 10회, 출처 표기 의무, 키 공개 저장소 금지, 해지 시 데이터 삭제 | 최신 일정·결과 폴링(Kafka 수집기) | 계정 필요 |
+| [football-data.org](https://www.football-data.org/coverage) API | 무료 12개 대회 일정·결과·순위 | 계정 등록 필요, 분당 10회, 출처 표기 의무, 키 공개 저장소 금지, 해지 시 데이터 삭제 | 최신 일정·결과 폴링(Kafka 수집기) | 사용 중(PL 2026-27, 2026-10-21) |
 | [StatsBomb Open Data](https://github.com/statsbomb/open-data) | 선택 대회의 이벤트·라인업·360 데이터 | 분석·연구 목적. 제3자 제공·재배포 금지, 상업적 이용 금지, 공개 분석에 로고 표기, 이름·이메일 등록 요청 | Spark 대용량 처리 시연, 연구용 분석 | 연구 전용 |
 
 ## 소스별 세부
