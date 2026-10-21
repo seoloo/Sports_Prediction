@@ -1,6 +1,6 @@
 # 사용한 기술 스택
 
-작성: 2026-10-21(3단계 완료 시점). 버전은 저장소에 고정된 값입니다(`requirements*.txt`, `infra/docker-compose.yml`, `infra/*/Dockerfile`).
+작성: 2026-10-21(4a 시점). 버전은 저장소에 고정된 값입니다(`requirements*.txt`, `infra/docker-compose.yml`, `infra/*/Dockerfile`).
 
 ## 한눈에 보기
 
@@ -17,7 +17,8 @@
 | CI | GitHub Actions + pytest | checkout@v5, setup-python@v6 / pytest 9.1.1 | 사용 중 |
 | 개인 앱 | Streamlit + SQLite | 1.65.0 / 표준 라이브러리 | 사용 중(기존 카탈로그 앱) |
 | 문서 그림 | HTML → Edge headless → PNG | — | 사용 중 |
-| 대용량 처리 | Apache Spark | — | **계획**(로드맵 4단계 이후) |
+| 레이크 파일 형식 | Parquet(pyarrow) | 25.0.1 | 사용 중(4a) |
+| 분산 처리 | Apache Spark(pyspark, 단일 컨테이너 local 모드) | 4.1.3 | 사용 중(4a). 클러스터 실행은 계획 |
 | 배포 | Kubernetes(kind·k3d) + Helm | — | **계획** |
 | 모바일 보기 | FastAPI + 모바일 웹 화면 | — | **계획** |
 
@@ -134,6 +135,16 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 - **역할:** 프로젝트를 시작할 때부터 있던 종목 카탈로그·근거 화면(`app.py`, `src/`). 127.0.0.1에만 연다.
 - **왜:** Python만으로 화면을 빨리 만들 수 있다. 데이터 엔지니어링 파이프라인과는 별개로 유지 중이며, 모델 결과를 보여 주는 화면은 3d 이후 계획이다.
 
+### Apache Spark 4.1.3 + Parquet(pyarrow 25.0.1) (4a)
+
+- **역할:** Gold를 Parquet로 S3 `lake` 버킷에 내보내고, 시간순 특징을 Spark로 다시 계산해 dbt 결과와 대조한다.
+- **왜 지금:** 자료가 커서가 아니다(Postgres가 몇 초에 처리). 자료가 커져 Spark로 옮길 때 결과가 바뀌지 않는다는 것을 미리 증명하려는 것이다. 2,660경기 × 18열 대조 불일치 0.
+- **구성:** Java 17 + pyspark를 담은 컨테이너(`infra/spark/Dockerfile`, compose `spark` 프로필). Windows에서 Spark로 파일을 쓰려면 winutils가 필요해 Linux 컨테이너로 돌린다. 미니 PC·쿠버네티스로 그대로 옮길 수 있다.
+- **S3 연결:** s3a 커넥터 대신 boto3로 내려받고 올린다. s3a는 hadoop-aws와 수백 MB의 AWS SDK가 필요해 수 MB 자료에는 과하다. 커지면 바꾼다.
+- **Parquet:** 시즌별 Hive 방식 파티션, 열 형식 명시, 시각은 UTC 마이크로초(Spark 기본 INT96은 다른 도구가 시간대 없이 읽음).
+- **대안:** DuckDB(한 대에서 Parquet를 SQL로 빠르게)도 맞지만, 여러 대로 늘어나는 경로와 채용 수요를 생각해 Spark를 골랐다.
+- **쓰는 곳:** `pipelines/lake/`, `tests/test_lake.py`, `tests/test_spark_features.py`(CI는 Spark 이미지 안에서 `REQUIRE_SPARK=1`로 실행).
+
 ### 문서 그림(Edge headless)
 
 - **역할:** `docs/diagrams/*.html`을 PNG로 렌더링(`scripts/render_diagrams.ps1`).
@@ -143,7 +154,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 
 | 기술 | 쓸 곳 | 아직 안 쓴 이유 | 도입 조건 |
 |---|---|---|---|
-| Spark | 여러 리그·수십 시즌·이벤트 단위 자료의 특징 계산 | 지금 데이터(경기 2,280, 배당 16만 행)는 Postgres가 몇 초에 처리한다. 작은 데이터에 Spark를 쓰면 설명하기 어렵다 | 리그 확장으로 Postgres 처리 시간이 문제가 될 때, Parquet로 내보낸 Gold에서 시작 |
+| Spark 클러스터·s3a | 여러 대에서 Spark 실행, S3 직접 읽기 | 지금은 단일 컨테이너로 충분(4a) | 리그 확장으로 자료가 커질 때, 쿠버네티스 단계에서 Spark on Kubernetes와 함께 |
 | Kubernetes + Helm | 수집기·소비자·Postgres 배포, 재시작·자원 제한 | Docker Compose로 개인 PC 운영은 충분하다 | 모델·API까지 서비스가 늘었을 때 kind·k3d로 로컬 클러스터부터 |
 | FastAPI + 모바일 웹 | 휴대폰에서 이번 주 예측·주간 보고서 확인 | 3단계까지 끝났고 다음 단계다. 검증 전 확률은 화면에도 WITHHELD로 보여 준다 | 4단계, 외부 접속 방식 결정 필요 |
 
@@ -158,8 +169,8 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 **Q. 데이터가 작은데 Kafka가 꼭 필요했나요?**
 양으로만 보면 필요 없습니다. Kafka를 쓴 이유는 처리 방식입니다. 경기 갱신은 언제 올지 모르는 이벤트이고, DB가 잠시 멈춰도 잃으면 안 되며, 규칙을 고친 뒤 처음부터 다시 처리할 수 있어야 합니다. 실제로 오프셋을 처음으로 돌려 380개를 다시 처리했고, 중복으로 걸러져 Silver가 바뀌지 않는 것을 확인했습니다.
 
-**Q. 그럼 Spark는 왜 안 썼나요?**
-지금 데이터는 Postgres가 몇 초에 처리합니다. 필요 없는 곳에 Spark를 넣으면 운영만 복잡해집니다. 대신 여러 리그로 늘어날 때 Gold를 Parquet로 내보내 Spark로 특징을 계산하는 것을 다음 단계로 계획해 뒀습니다.
+**Q. 데이터가 작은데 Spark는 왜 썼나요?**
+크기 때문은 아닙니다. 지금 데이터는 Postgres가 몇 초에 처리합니다. 자료가 커져 Spark로 옮길 때 결과가 바뀌지 않는다는 것을 미리 증명하려고, 같은 특징을 dbt와 Spark로 각각 구현해 2,660경기 × 18개 열을 대조했고 불일치는 0이었습니다. 운영 경로는 여전히 dbt이고, Spark는 옮겨 갈 길을 검증해 둔 것입니다.
 
 **Q. Bronze를 왜 DB가 아니라 객체 저장소에 두었나요?**
 원본 파일은 크기가 제각각이고 파싱하지 않은 바이트 그대로 둬야 합니다. 객체 저장소가 그 용도에 맞고, 내용 해시를 경로로 쓰면 같은 파일은 자동으로 한 번만 저장됩니다. S3 API를 쓰므로 클라우드로 옮기기도 쉽습니다.

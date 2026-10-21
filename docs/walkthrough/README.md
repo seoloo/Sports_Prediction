@@ -15,5 +15,6 @@
 | 3d | [경기 전 예측 기록과 주간 채점](3d_prospective_predictions.md) | 스냅샷 순간에만 예측, 실제 수신 자료로 학습, 같은 as_of를 DB가 강제, 검증 전 WITHHELD, 주간 보고서 DAG |
 | 3e | [모델 개선](3e_model_improvements.md) | 승격 첫 시즌 효과, 확률 보정, 2020-21 추가, 검증 두 시즌, 실패와 판단 과정, 시험을 본 횟수 공개 |
 | 3f | [교차 보정](3f_cross_fit_calibration.md) | 보정 계수를 고른 자료로 채점하는 낙관 측정·제거, 시즌 단위 교차, 고른 방법을 버전에 기록 |
+| 4a | [데이터 레이크와 Spark](4a_spark_lake.md) | Gold → Parquet(lake 버킷), Spark 재계산, dbt와 2,660경기 × 18열 대조 불일치 0, CI에서 Spark 테스트 |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md), 주제별(예외 처리·메달리온·기술 스택) 정리는 [면접 준비 문서](../interview/README.md)를 함께 보세요.
