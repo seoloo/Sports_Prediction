@@ -61,6 +61,7 @@
 | `silver.matches` | 2,280 | 경기의 변하지 않는 정체성(리그·시즌·홈·원정) |
 | `silver.match_revisions` | 2,280 | openfootball 경기 내용(일정·점수)의 버전 |
 | `silver.live_match_revisions` | 380 | football-data.org 경기 상태·점수의 버전(published_at = API 갱신 시각) |
+| `silver.match_stats_revisions` | 1,969 | 경기 기록(슈팅·유효 슈팅·퇴장)의 버전(co.uk, 3g) |
 | `silver.odds_revisions` | 166,589 | 배당의 버전(북메이커 × 시장 × 선택지 × 시점) |
 | `silver.quality_issues` | 2 | 수집 단계에서 걸러낸 레코드와 사유 |
 | `silver.stream_rejections` | 0 | 스트리밍에서 반영하지 않은 이벤트와 사유 |
@@ -83,10 +84,10 @@
 
 | 테이블 | 행 | 내용 |
 |---|---|---|
-| `modeling.backtest_runs` | 97 | 실행 기록(모델 버전, 하이퍼파라미터, 검증/시험, 평가 시즌, 데이터셋 해시, 요약 성적) |
-| `modeling.backtest_predictions` | 66,130 | 예측마다 학습 기준 시각, 학습 경기 수, 확률, 결과 |
+| `modeling.backtest_runs` | 179 | 실행 기록(모델 버전, 하이퍼파라미터, 검증/시험, 평가 시즌, 데이터셋 해시, 요약 성적) |
+| `modeling.backtest_predictions` | 132,500 | 예측마다 학습 기준 시각, 학습 경기 수, 확률, 결과 |
 | `modeling.prospective_reports` | 1 | 경기 전 예측의 주간 보고서(3d). 같은 주라도 결과 정정으로 내용이 바뀌면 새 행 |
-| `modeling.evaluation_reports` | 4 | 평가 보고서(어떤 실행을 어떤 방법·기준으로 평가했는지와 결과, 3c). 방법 버전 3c.1·3c.2·3c.3(3e) |
+| `modeling.evaluation_reports` | 5 | 평가 보고서(어떤 실행을 어떤 방법·기준으로 평가했는지와 결과, 3c). 방법 버전 3c.1·3c.2·3c.3(3e) |
 
 ## Gold: 바로 쓰는 모양
 
@@ -99,7 +100,8 @@
 | `gold.team_match_results` | 테이블 | 3,940 | 끝난 경기를 팀 관점 2행으로 |
 | `gold.league_standings` | 테이블 | 120 | 리그·시즌별 순위표 |
 | `gold.match_odds_1x2` | 테이블 | 33,021 | 1X2 배당과 마진을 뺀 확률(시장 기준선) |
-| `gold.match_features_pit` | 테이블 | 2,280 | 시간순 학습 데이터셋(시작 전 정보만으로 만든 팀 지표, 3a) |
+| `gold.match_stats` | 테이블 | 1,969 | 끝난 경기의 기록(3g). 대상 경기보다 앞서 끝난 경기의 것만 모델 입력 |
+| `gold.match_features_pit` | 테이블 | 2,660 | 시간순 학습 데이터셋(시작 전 정보만으로 만든 팀 지표, 3a) |
 
 **규칙**
 
@@ -107,7 +109,7 @@
 - 분석 규칙은 여기에만 둔다. 소스 우선순위, 순위 동률 처리, 특징 계산 창 같은 결정.
 - 시점 선택은 Silver의 `*_known_at` 함수에 맡긴다. 같은 규칙을 두 곳에 두지 않는다.
 - dbt 변수 `as_of`로 과거 시점 기준으로 다시 계산할 수 있다. 예: `--vars "{as_of: '2025-01-01T00:00:00Z'}"`
-- 품질 테스트 22개(유일성, 필수값, 허용값, 순위표 정합성, 확률 합 = 1, 시점 누수)가 실패하면 빌드가 실패한다. CI 기록의 `PASS=28`은 모델 6개 + 테스트 22개를 합친 수다.
+- 품질 테스트 26개(유일성, 필수값, 허용값, 순위표 정합성, 확률 합 = 1, 시점 누수)가 실패하면 빌드가 실패한다. dbt 출력의 `PASS=34`는 모델 8개 + 테스트 26개를 합친 수다(3g에서 경기 기록 모델 2개·테스트 4개 추가).
 
 ## 데이터 하나가 층을 지나는 예
 
