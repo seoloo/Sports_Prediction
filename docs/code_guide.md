@@ -38,6 +38,9 @@
 | [pipelines/snapshots.py](../pipelines/snapshots.py) | 경기 시작 24·3·1시간 전 입력 스냅샷(놓친 시점은 MISSED) | `decide`, `build_inputs`, `run` |
 | [pipelines/dbt_runner.py](../pipelines/dbt_runner.py) | `.env` 접속 정보를 넘겨 별도 가상환경의 dbt 실행 | `run_dbt` |
 | [pipelines/schedule.py](../pipelines/schedule.py) | 날짜 → 수집할 시즌 이름(순수 함수) | `seasons_for` |
+| [pipelines/modeling/dataset.py](../pipelines/modeling/dataset.py) | 시간순 데이터셋 읽기, Python 독립 재계산으로 누수 검사(3a) | `load_dataset`, `verify_point_in_time` |
+| [pipelines/modeling/models.py](../pipelines/modeling/models.py) | 기준 모델: 단순 비율, Poisson(ridge IRLS·시간 감쇠), Dixon-Coles(3b) | `PoissonModel.fit`, `DixonColesModel.fit`, `outcome_probabilities` |
+| [pipelines/modeling/backtest.py](../pipelines/modeling/backtest.py) | 주 단위 재학습 백테스트, 검증 시즌에서 설정 선택, 시험 시즌 평가, 실행·예측 기록(3b) | `walk_forward`, `summarize`, `store_run`, `run` |
 | [dbt/models/](../dbt/models/) | `staging.stg_matches_known` → `gold.team_match_results` → `gold.league_standings`, `staging.stg_odds_known` → `gold.match_odds_1x2` | — |
 | [dbt/tests/](../dbt/tests/) | 순위표 정합성·끝난 경기당 팀 행 2개 검사 | — |
 | [dags/openfootball_epl_daily.py](../dags/openfootball_epl_daily.py) | 매일 스키마 확인 → 시즌별 수집(동적 태스크) → 배당 CSV 수집 → dbt build | — |
