@@ -18,5 +18,6 @@
 | 3g | [경기 기록과 시장 결합](3g_match_stats_and_market.md) | 유효 슈팅·퇴장·휴식·시장 결합 실험(모두 효과 없음), 라인업·교체·퇴장을 쓸 수 있는지 |
 | 4a | [데이터 레이크와 Spark](4a_spark_lake.md) | Gold → Parquet(lake 버킷), Spark 재계산, dbt와 2,660경기 × 18열 대조 불일치 0, CI에서 Spark 테스트 |
 | 4b | [텔레그램 알림](4b_telegram_alerts.md) | 들어오는 길 없이 내보내기, 경기 전·주간·실패 알림, 중복 방지, 토큰 보호, 봇 설정 방법 |
+| 5a | [다섯 리그로 확장](5a_multi_league.md) | 소스 확인, 리그 목록 한곳에, 팀 대조표 76개 검토, 수집기·DAG 확장, 모델 없는 리그는 보류 |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md), 주제별(예외 처리·메달리온·기술 스택) 정리는 [면접 준비 문서](../interview/README.md)를 함께 보세요.

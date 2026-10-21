@@ -1,6 +1,6 @@
 # 메달리온 아키텍처 (Bronze · Silver · Gold)
 
-작성: 2026-10-21(3단계 완료 시점). 숫자는 이 날의 로컬 데이터입니다.
+작성: 2026-10-21(3단계 완료 시점). 숫자는 이 날의 로컬 데이터입니다. 행 수는 5a(다섯 리그) 이후 값입니다.
 
 ## 한 줄 요약
 
@@ -46,7 +46,7 @@
 | 테이블 | 행 | 내용 |
 |---|---|---|
 | `ingest.sources` | 4 | 소스별 사용 조건 검토 결과(자동 수집 허용 여부 포함) |
-| `ingest.raw_files` | 13 | 원본 파일 목록(해시, 크기, 객체 경로, 처음 받은 시각) |
+| `ingest.raw_files` | 47 | 원본 파일 목록(해시, 크기, 객체 경로, 처음 받은 시각) |
 | `ingest.fetches` | 63 | 가져올 때마다의 기록(같은 내용을 다시 받았는지) |
 | `ingest.runs` | 63 | 실행 기록(성공·실패, 통계, 오류) |
 
@@ -56,11 +56,11 @@
 
 | 테이블 | 행 | 내용 |
 |---|---|---|
-| `silver.teams` | 29 | 기준 팀(openfootball 이름) |
-| `silver.team_aliases` | 78 | 소스별 팀 이름·ID → 기준 팀(검토한 대조표) |
-| `silver.matches` | 2,280 | 경기의 변하지 않는 정체성(리그·시즌·홈·원정) |
-| `silver.match_revisions` | 2,280 | openfootball 경기 내용(일정·점수)의 버전 |
-| `silver.live_match_revisions` | 380 | football-data.org 경기 상태·점수의 버전(published_at = API 갱신 시각) |
+| `silver.teams` | 152 | 기준 팀(openfootball 이름) |
+| `silver.team_aliases` | 277 | 소스별 팀 이름·ID → 기준 팀(검토한 대조표) |
+| `silver.matches` | 12,264 | 경기의 변하지 않는 정체성(리그·시즌·홈·원정) |
+| `silver.match_revisions` | 12,264 | openfootball 경기 내용(일정·점수)의 버전 |
+| `silver.live_match_revisions` | 1,752 | football-data.org 경기 상태·점수의 버전(published_at = API 갱신 시각) |
 | `silver.match_stats_revisions` | 1,969 | 경기 기록(슈팅·유효 슈팅·퇴장)의 버전(co.uk, 3g) |
 | `silver.odds_revisions` | 166,589 | 배당의 버전(북메이커 × 시장 × 선택지 × 시점) |
 | `silver.quality_issues` | 2 | 수집 단계에서 걸러낸 레코드와 사유 |
@@ -98,11 +98,11 @@
 |---|---|---|---|
 | `staging.stg_matches_known` | 뷰 | 2,280 | 기준 시각에 알려진 경기 정보. football-data.org 우선, 없으면 openfootball(`fixture_source` 열) |
 | `staging.stg_odds_known` | 뷰 | 166,589 | 기준 시각에 알려진 배당 |
-| `gold.team_match_results` | 테이블 | 3,940 | 끝난 경기를 팀 관점 2행으로 |
-| `gold.league_standings` | 테이블 | 120 | 리그·시즌별 순위표 |
+| `gold.team_match_results` | 테이블 | 21,558 | 끝난 경기를 팀 관점 2행으로 |
+| `gold.league_standings` | 테이블 | 672 | 리그·시즌별 순위표 |
 | `gold.match_odds_1x2` | 테이블 | 33,021 | 1X2 배당과 마진을 뺀 확률(시장 기준선) |
 | `gold.match_stats` | 테이블 | 1,969 | 끝난 경기의 기록(3g). 대상 경기보다 앞서 끝난 경기의 것만 모델 입력 |
-| `gold.match_features_pit` | 테이블 | 2,660 | 시간순 학습 데이터셋(시작 전 정보만으로 만든 팀 지표, 3a) |
+| `gold.match_features_pit` | 테이블 | 11,416 | 시간순 학습 데이터셋(시작 전 정보만으로 만든 팀 지표, 3a) |
 
 **규칙**
 
