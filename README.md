@@ -133,6 +133,7 @@ Gold를 Parquet로 S3 `lake` 버킷에 내보내고, Spark 컨테이너가 시�
 docker compose --env-file .env -f infra/docker-compose.yml --profile spark run --rm spark-features
 ~~~
 
+- 매일 DAG(`openfootball_epl_daily`)의 마지막 작업 `spark_reconcile`이 dbt build 뒤에 자동으로 돌립니다. 불일치가 있으면 작업이 실패로 표시됩니다.
 - Spark 없이 내보내기·대조만: `.\.venv\Scripts\python.exe -m pipelines.lake.run export` / `... reconcile`
 - 검증 체계 전체(데이터 형식 → 시점 누수 → 구현 동등성 → 모델 성능 → 운영 성능): [검증 체계](docs/interview/validation.md)
 

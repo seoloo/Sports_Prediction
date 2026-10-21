@@ -199,6 +199,7 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       BRONZE_BUCKET: ${BRONZE_BUCKET:-bronze}
+      LAKE_BUCKET: ${LAKE_BUCKET:-lake}
     ports:
       - "127.0.0.1:${AIRFLOW_PORT:-58080}:8080"
     volumes:

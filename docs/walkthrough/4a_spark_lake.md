@@ -60,6 +60,27 @@ python -m pipelines.lake.run all   (Spark 컨테이너, docker compose --profile
 | Spark 이미지 | `sports-prediction-spark:4.1.3`, 1.79GB(Java 17 + pyspark) |
 | 테스트 | 호스트 4개 + Spark 컨테이너 2개 추가. 전체(호스트) 309개 통과, 1개는 Spark 전용이라 건너뜀(CI는 컨테이너에서 실행) |
 
+## 매일 자동 실행(4a 후속)
+
+매일 DAG(`openfootball_epl_daily`)의 마지막 작업 `spark_reconcile`이 dbt build 뒤에 내보내기 → Spark → 대조를 돌립니다.
+
+```text
+migrate → seasons → ingest_season(시즌별) → ingest_football_data_files → dbt_build → spark_reconcile
+```
+
+| 결정 | 위치 | 이유 |
+|---|---|---|
+| Spark를 Airflow 이미지의 별도 가상환경에 | `infra/airflow/Dockerfile`(`/home/airflow/spark-venv`, OpenJDK 17) | Airflow가 Spark 컨테이너를 직접 띄우려면 docker.sock을 넘겨야 하는데, 그건 사실상 PC 관리자 권한이다. dbt와 같은 "별도 가상환경" 방식이 더 안전하고, Spark 이미지와 같은 `requirements-spark.txt`로 설치해 환경도 같다 |
+| 별도 파이썬으로 실행 | `pipelines/lake/run.py`의 `run_isolated` | Airflow 환경과 Spark 환경의 라이브러리가 섞이지 않는다. 결과 JSON만 stdout으로 받는다 |
+| 대조 실패 = 작업 실패 | 같은 함수 | 불일치가 하나라도 있으면 RuntimeError로 Airflow 화면에 빨갛게 보인다. Spark가 아예 못 뜬 경우도 원인(stderr 끝부분)을 보여 준다 |
+| 재시도 1번만 | DAG의 `@task(retries=1)` | S3 일시 오류는 다시 해 볼 만하지만, 대조 불일치는 다시 해도 같다 |
+| Gold가 같으면 건너뜀 | 내용 해시 스냅샷 | 매일 돌아도 Gold가 바뀐 날만 Spark가 계산한다(바뀌지 않은 날은 몇 초) |
+
+확인(2026-10-21):
+- Airflow 안에서 `airflow tasks test openfootball_epl_daily spark_reconcile` 성공. 같은 스냅샷이라 계산은 건너뛰었고, 대조는 통과했습니다.
+- 처음부터 계산하는 경우도 확인하려고 임시 버킷으로 Airflow 안에서 전체를 실행했습니다. 파일 21개, Spark 새로 계산, 불일치 0, 19초. 확인 뒤 임시 버킷은 지웠습니다.
+- Airflow 이미지는 Java·Spark가 더해져 5.45GB가 됐습니다.
+
 ## 직접 확인하는 방법
 
 전체(내보내기 → Spark → 대조):
@@ -119,5 +140,5 @@ s3a 커넥터는 hadoop-aws와 수백 MB의 AWS SDK가 필요합니다. 지금 �
 - **Spark는 단일 컨테이너 local 모드입니다.** 클러스터(여러 대) 실행은 하지 않았습니다. 쿠버네티스 단계(4c 예정)에서 Spark on Kubernetes를 검토합니다.
 - **s3a를 쓰지 않습니다.** 자료가 커지면 바꿔야 합니다.
 - **Iceberg·Delta 같은 테이블 형식은 아직 없습니다.** 스냅샷은 경로와 매니페스트로 관리합니다.
-- **Airflow DAG에 아직 넣지 않았습니다.** 지금은 명령으로 실행합니다. Gold가 매일 다시 만들어지므로, 매일 DAG 끝에 붙이는 것이 다음 후보입니다.
+- **Airflow 이미지가 커졌습니다(5.45GB).** Airflow·dbt·Spark(Java 포함)가 한 이미지에 있기 때문입니다. 쿠버네티스 단계에서는 Spark를 별도 파드로 분리하는 것(Spark on Kubernetes)이 맞습니다.
 - **Spark 이미지가 큽니다(1.79GB).** Java와 Spark 전체가 들어 있기 때문입니다.

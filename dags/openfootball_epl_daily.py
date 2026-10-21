@@ -1,10 +1,12 @@
-"""매일 EPL 일정·결과를 수집하고 Gold 테이블을 다시 만드는 DAG(로드맵 1d).
+"""매일 EPL 일정·결과를 수집하고 Gold 테이블을 다시 만드는 DAG(로드맵 1d, 4a에서 Spark 대조 추가).
 
 순서: 스키마 확인 → 수집할 시즌 결정 → 시즌별 수집(동적 태스크) → football-data 배당 CSV 수집 → dbt build
+     → Gold를 Parquet로 내보내고 Spark로 특징을 다시 계산해 dbt 결과와 대조(4a)
 - football-data.co.uk CSV는 사용자가 직접 내려받아 data/landing/football-data-co-uk/에 넣은 파일만 읽는다(자동 다운로드 금지).
 - 수집은 멱등이라 같은 날 여러 번 실행해도 원본·경기 버전이 늘지 않는다. Gold는 매번 테이블을 다시 만든다.
 - 아직 openfootball에 올라오지 않은 시즌(404)은 실패가 아니라 건너뜀으로 처리한다.
 - dbt 품질 테스트가 하나라도 실패하면 DAG 실행이 실패로 표시된다.
+- Spark 결과와 dbt 결과가 한 칸이라도 다르면 마지막 작업이 실패로 표시된다. Gold가 같으면 같은 스냅샷이라 다시 계산하지 않는다.
 """
 import urllib.error
 from datetime import datetime, timedelta, timezone
@@ -67,8 +69,17 @@ def openfootball_epl_daily():
         trigger_rule="none_failed",  # 일부 시즌이 건너뜀이어도 Gold는 만든다. 실패가 있으면 만들지 않는다.
     )
 
+    @task(retries=1)   # S3 일시 오류만 한 번 더. 대조 불일치는 다시 해도 같으므로 여러 번 재시도하지 않는다.
+    def spark_reconcile():
+        """Gold → Parquet(lake 버킷) → Spark 재계산 → dbt 결과와 대조(4a). Spark는 별도 가상환경에서 돈다."""
+        from pipelines.lake.run import run_isolated
+        report = run_isolated("all")
+        return {"snapshot": report["export"]["snapshot"], "uploaded_files": report["export"]["uploaded_files"],
+                "spark_newly_computed": report["spark"]["newly_computed"], "reconcile": report["reconcile"]}
+
     # 배당은 openfootball 경기에 연결하므로 경기 수집이 끝난 뒤에 넣는다.
     migrate_schema() >> ingest_season.expand(season=seasons_to_ingest()) >> ingest_football_data_files() >> dbt_build
+    dbt_build >> spark_reconcile()
 
 
 openfootball_epl_daily()

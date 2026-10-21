@@ -39,7 +39,7 @@
 | [pipelines/lake/export.py](../pipelines/lake/export.py) | Gold → Parquet(lake 버킷, 시즌 파티션, 내용 해시 스냅샷, 정답 dbt 결과 포함)(4a) | `export`, `snapshot_id`, `to_parquet` |
 | [pipelines/lake/spark_features.py](../pipelines/lake/spark_features.py) | Spark로 시간순 특징 재계산(조인 + row_number), 결과 업로드(4a) | `compute_features`, `run` |
 | [pipelines/lake/reconcile.py](../pipelines/lake/reconcile.py) | Spark 결과 ↔ dbt 결과 행·열 대조(pyarrow)(4a) | `reconcile`, `same` |
-| [pipelines/lake/run.py](../pipelines/lake/run.py) | export → spark → reconcile 실행(실패 시 종료 코드 1) | `main` |
+| [pipelines/lake/run.py](../pipelines/lake/run.py) | export → spark → reconcile 실행(실패 시 종료 코드 1), Airflow용 별도 가상환경 실행 | `main`, `run_isolated` |
 | [pipelines/dbt_runner.py](../pipelines/dbt_runner.py) | `.env` 접속 정보를 넘겨 별도 가상환경의 dbt 실행 | `run_dbt` |
 | [pipelines/schedule.py](../pipelines/schedule.py) | 날짜 → 수집할 시즌 이름(순수 함수) | `seasons_for` |
 | [pipelines/modeling/dataset.py](../pipelines/modeling/dataset.py) | 시간순 데이터셋 읽기, Python 독립 재계산으로 누수 검사(3a) | `load_dataset`, `verify_point_in_time` |
@@ -49,7 +49,7 @@
 | [pipelines/modeling/evaluation.py](../pipelines/modeling/evaluation.py) | 저장된 시험 예측 평가: 블록 부트스트랩, 확률 보정, 약한 곳, 검증 기준, 보고서 저장·Markdown 생성(3c) | `block_bootstrap`, `calibration`, `segments`, `gate`, `render_markdown` |
 | [dbt/models/](../dbt/models/) | `staging.stg_matches_known` → `gold.team_match_results` → `gold.league_standings`, `staging.stg_odds_known` → `gold.match_odds_1x2` | — |
 | [dbt/tests/](../dbt/tests/) | 순위표 정합성·끝난 경기당 팀 행 2개 검사 | — |
-| [dags/openfootball_epl_daily.py](../dags/openfootball_epl_daily.py) | 매일 스키마 확인 → 시즌별 수집(동적 태스크) → 배당 CSV 수집 → dbt build | — |
+| [dags/openfootball_epl_daily.py](../dags/openfootball_epl_daily.py) | 매일 스키마 확인 → 시즌별 수집(동적 태스크) → 배당 CSV 수집 → dbt build → Spark 재계산·대조(4a) | — |
 | [dags/prematch_snapshots.py](../dags/prematch_snapshots.py) | 30분마다 경기 전 스냅샷 + 모델 예측 | — |
 | [dags/weekly_model_report.py](../dags/weekly_model_report.py) | 화요일 06:00 UTC 지난주 예측 채점·주간 보고서 | — |
 | [infra/airflow/Dockerfile](../infra/airflow/Dockerfile) | Airflow 3.3.2 이미지 + 파이프라인 라이브러리 + dbt 전용 가상환경 | — |

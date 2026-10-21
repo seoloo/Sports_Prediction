@@ -77,3 +77,31 @@ def test_export_is_idempotent_and_reconcile_detects_differences(lake):
     result = reconcile.reconcile(store, TEST_LAKE_BUCKET, snapshot)
     assert not result["passed"] and result["mismatches"] == 1
     assert result["examples"][0]["column"] == "home_l10_gf" and result["examples"][0]["match_id"] == changed["match_id"]
+
+
+def test_run_isolated_reports_success_and_fails_loudly(monkeypatch):
+    import subprocess
+
+    from pipelines.lake import run
+
+    calls = []
+
+    def fake(returncode, stdout, stderr=""):
+        def runner(command, **kwargs):
+            calls.append(command)
+            return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+        return runner
+
+    ok = {"export": {"snapshot": "s"}, "reconcile": {"passed": True, "mismatches": 0}}
+    monkeypatch.setattr(run.subprocess, "run", fake(0, json.dumps(ok)))
+    assert run.run_isolated("all", python="/spark/python") == ok
+    assert calls[-1] == ["/spark/python", "-m", "pipelines.lake.run", "all"]
+
+    mismatch = {"reconcile": {"passed": False, "mismatches": 3}}
+    monkeypatch.setattr(run.subprocess, "run", fake(1, json.dumps(mismatch)))
+    with pytest.raises(RuntimeError, match="mismatches"):   # 대조 불일치 → Airflow 작업 실패
+        run.run_isolated("all", python="/spark/python")
+
+    monkeypatch.setattr(run.subprocess, "run", fake(1, "", "Java gateway process exited"))
+    with pytest.raises(RuntimeError, match="Java gateway"):   # Spark가 아예 못 뜬 경우도 원인을 보여 준다
+        run.run_isolated("all", python="/spark/python")

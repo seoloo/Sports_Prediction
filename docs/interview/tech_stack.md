@@ -109,7 +109,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 
 ### Apache Airflow 3.3.2
 
-- **역할:** 매일 배치(마이그레이션 → 시즌 결정 → 시즌별 수집 → co.uk 파일 수집 → dbt build), 30분마다 경기 전 스냅샷과 모델 예측, 화요일 06:00 UTC 주간 채점 보고서(DAG 3개).
+- **역할:** 매일 배치(마이그레이션 → 시즌 결정 → 시즌별 수집 → co.uk 파일 수집 → dbt build), 30분마다 경기 전 스냅샷과 모델 예측, 화요일 06:00 UTC 주간 채점 보고서(DAG 3개). 매일 DAG 끝에서 Spark 재계산·대조(4a).
 - **왜:** 데이터 엔지니어링의 표준 오케스트레이터다. 재시도, 실행 기록, 동적 작업(`ingest_season.expand`로 시즌 수만큼 작업 생성)을 제공한다.
 - **구성:** standalone + LocalExecutor. 개인 PC 한 대라 Celery·Kubernetes 실행기는 과하다. Airflow 메타데이터는 같은 Postgres 서버 안의 별도 데이터베이스(`airflow`)에 두어 프로젝트 데이터(`sports`)와 섞이지 않게 했다(`airflow-db-init`이 한 번만 만든다).
 - **경계:** 상시 실행(수집기·소비자)은 Airflow에 넣지 않고 별도 컨테이너로 돌린다. Airflow는 "정해진 시각에 끝나는 작업"용이다.
@@ -139,7 +139,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 
 - **역할:** Gold를 Parquet로 S3 `lake` 버킷에 내보내고, 시간순 특징을 Spark로 다시 계산해 dbt 결과와 대조한다.
 - **왜 지금:** 자료가 커서가 아니다(Postgres가 몇 초에 처리). 자료가 커져 Spark로 옮길 때 결과가 바뀌지 않는다는 것을 미리 증명하려는 것이다. 2,660경기 × 18열 대조 불일치 0.
-- **구성:** Java 17 + pyspark를 담은 컨테이너(`infra/spark/Dockerfile`, compose `spark` 프로필). Windows에서 Spark로 파일을 쓰려면 winutils가 필요해 Linux 컨테이너로 돌린다. 미니 PC·쿠버네티스로 그대로 옮길 수 있다.
+- **구성:** Java 17 + pyspark를 담은 컨테이너(`infra/spark/Dockerfile`, compose `spark` 프로필). 매일 자동 실행은 Airflow 이미지 안의 별도 가상환경(`/home/airflow/spark-venv`)에서 한다. Airflow에 docker.sock(사실상 관리자 권한)을 넘기지 않기 위해서다. Windows에서 Spark로 파일을 쓰려면 winutils가 필요해 Linux 컨테이너로 돌린다. 미니 PC·쿠버네티스로 그대로 옮길 수 있다.
 - **S3 연결:** s3a 커넥터 대신 boto3로 내려받고 올린다. s3a는 hadoop-aws와 수백 MB의 AWS SDK가 필요해 수 MB 자료에는 과하다. 커지면 바꾼다.
 - **Parquet:** 시즌별 Hive 방식 파티션, 열 형식 명시, 시각은 UTC 마이크로초(Spark 기본 INT96은 다른 도구가 시간대 없이 읽음).
 - **대안:** DuckDB(한 대에서 Parquet를 SQL로 빠르게)도 맞지만, 여러 대로 늘어나는 경로와 채용 수요를 생각해 Spark를 골랐다.

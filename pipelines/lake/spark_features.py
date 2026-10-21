@@ -32,6 +32,7 @@ def spark_session(app_name: str = "match_features_pit"):
             # season=2025-26 같은 경로 값을 날짜 등으로 추측하지 않고 문자열로 둔다.
             .config("spark.sql.sources.partitionColumnTypeInference.enabled", "false")
             .config("spark.ui.enabled", "false")
+            .config("spark.ui.showConsoleProgress", "false")   # 진행 막대를 끄면 Airflow 로그가 깨끗하다
             .getOrCreate())
 
 
