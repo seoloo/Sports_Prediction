@@ -4,7 +4,7 @@
 
 - 대상: 3b 시험(TEST) 백테스트의 끝난 경기. 과거 재구성 가정(결과는 시작 3시간 뒤 공개) 위의 결과입니다.
 - 불확실성: 주 단위 블록 부트스트랩 2000회(seed 20261021). 차이는 왼쪽 − 오른쪽 로그 손실이며, 음수면 왼쪽이 더 정확합니다.
-- 실행: 단순 비율 run 74 (`base_rate|3e.1|laplace=1`), Dixon-Coles run 108 (`dixon_coles|3e.1|ridge=10.0|half_life_days=180.0`), Poisson run 91 (`poisson|3e.1|ridge=10.0|half_life_days=180.0`), Poisson+보정 run 127 (`poisson_calibrated|3e.1|ridge=10.0|half_life_days=180.0|temperature=1.13`), Poisson+승격 효과 run 125 (`poisson_promoted|3e.1|ridge=10.0|half_life_days=180.0|promoted_effect`), Poisson+승격 효과+보정 run 129 (`poisson_promoted_calibrated|3e.1|ridge=10.0|half_life_days=180.0|promoted_effect|temperature=1.04`)
+- 실행: 단순 비율 run 74 (`base_rate|3e.1|laplace=1`), Dixon-Coles run 108 (`dixon_coles|3e.1|ridge=10.0|half_life_days=180.0`), Poisson run 91 (`poisson|3e.1|ridge=10.0|half_life_days=180.0`), Poisson+보정 run 184 (`poisson_calibrated|3e.1|ridge=10.0|half_life_days=180.0|temperature=1.13|calibration=cross_fit_by_season`), Poisson+승격 효과 run 125 (`poisson_promoted|3e.1|ridge=10.0|half_life_days=180.0|promoted_effect`), Poisson+승격 효과+보정 run 186 (`poisson_promoted_calibrated|3e.1|ridge=10.0|half_life_days=180.0|promoted_effect|temperature=1.04|calibration=cross_fit_by_season`)
 
 ## 요약
 

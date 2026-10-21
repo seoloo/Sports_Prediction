@@ -132,10 +132,14 @@ def test_sharpen_spreads_or_flattens_probabilities():
 def test_model_from_params_rebuilds_the_same_version():
     for model in (BaseRateModel(), PoissonModel(ridge=10.0, half_life_days=180.0),
                   PoissonModel(name="poisson_promoted_calibrated", ridge=10.0, half_life_days=180.0,
-                               promoted_effect=True, temperature=1.04),
+                               promoted_effect=True, temperature=1.04, calibration="cross_fit_by_season"),
                   DixonColesModel(ridge=3.0, half_life_days=None)):
         assert model_from_params(model.name, model.params).version == model.version
     assert PoissonModel(ridge=10.0, half_life_days=180.0).params == {"ridge": 10.0, "half_life_days": 180.0}
+    # 계수를 고른 방법은 예측에 영향이 없고 버전에만 남는다.
+    with_method = PoissonModel(ridge=10.0, half_life_days=180.0, temperature=1.1, calibration="cross_fit_by_season")
+    without = PoissonModel(ridge=10.0, half_life_days=180.0, temperature=1.1)
+    assert with_method.version == without.version + "|calibration=cross_fit_by_season"
 
 
 def test_promoted_by_season_compares_with_the_previous_season():

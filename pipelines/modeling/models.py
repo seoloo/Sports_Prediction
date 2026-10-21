@@ -67,12 +67,15 @@ class PoissonModel:
       이 계수로 과거 승격 팀들의 실제 성적만큼 출발점을 옮긴다.
     - temperature(3e): 승·무·패 확률을 p^t로 바꾼 뒤 다시 정규화한다. 1보다 크면 확률을 펴고(확신 ↑),
       작으면 가운데로 모은다. 축소 때문에 확률이 눌리는 문제(3c)를 검증 시즌에서 고른 값 하나로 보정한다.
+    - calibration(3f): temperature를 어떻게 골랐는지(예: "cross_fit_by_season"). 예측에는 영향이 없고
+      버전에만 남는다. 고르는 방법이 다르면 검증 점수의 뜻이 달라지므로 다른 모델로 기록한다.
     """
     ridge: float = 3.0
     half_life_days: float | None = 180.0
     name: str = "poisson"
     promoted_effect: bool = False
     temperature: float = 1.0
+    calibration: str | None = None
     mu: float = 0.0
     home_advantage: float = 0.0
     promoted_attack: float = 0.0
@@ -87,6 +90,8 @@ class PoissonModel:
             params["promoted_effect"] = True
         if self.temperature != 1.0:
             params["temperature"] = self.temperature
+        if self.calibration:
+            params["calibration"] = self.calibration
         return params
 
     @property
@@ -96,6 +101,8 @@ class PoissonModel:
             version += "|promoted_effect"
         if self.temperature != 1.0:
             version += f"|temperature={self.temperature}"
+        if self.calibration:
+            version += f"|calibration={self.calibration}"
         return version
 
     def weights(self, matches: list[tuple], as_of: datetime) -> np.ndarray:
@@ -277,7 +284,7 @@ def model_from_params(name: str, params: dict):
     model_class = DixonColesModel if name.startswith("dixon_coles") else PoissonModel
     return model_class(name=name, ridge=params["ridge"], half_life_days=params["half_life_days"],
                        promoted_effect=bool(params.get("promoted_effect", False)),
-                       temperature=float(params.get("temperature", 1.0)))
+                       temperature=float(params.get("temperature", 1.0)), calibration=params.get("calibration"))
 
 
 def outcome_probabilities(matrix: np.ndarray) -> tuple[float, float, float]:

@@ -9,8 +9,9 @@
 - 학습 경기가 MIN_TRAINING_MATCHES보다 적으면 확률을 만들지 않고 WITHHELD로 남긴다.
 - 3e 개선 계열
   - poisson_promoted: 승격 첫 시즌 효과를 함께 학습(후보 격자는 poisson과 같다).
-  - *_calibrated: 기준 계열에서 고른 설정에 확률 보정 계수(temperature) 하나를 더한다. 계수는 그 설정의
-    검증 시즌 예측으로 고른다(검증 안에서 고르므로 검증 성적은 약간 낙관적이고, 시험은 여전히 한 번만 평가).
+  - *_calibrated: 기준 계열에서 고른 설정에 확률 보정 계수(temperature) 하나를 더한다.
+    3f: 검증 점수는 교차 보정으로 낸다. 검증 시즌마다 "다른 검증 시즌에서 고른 계수"를 적용해 점수를 매기므로,
+    계수를 고른 자료로 그 계수를 채점하는 낙관이 없다. 시험·운영에 쓰는 계수는 검증 시즌 전체로 고른다.
 
 실행: python -m pipelines.modeling.backtest  (기록하지 않고 보기만: --no-store)
 """
@@ -42,6 +43,7 @@ RIDGE_GRID = (1.0, 3.0, 10.0, 30.0)
 HALF_LIFE_GRID = (None, 365.0, 180.0, 90.0)
 TEMPERATURE_GRID = tuple(round(0.70 + 0.01 * step, 2) for step in range(91))   # 0.70 ~ 1.60
 CALIBRATED_FROM = {"poisson_calibrated": "poisson", "poisson_promoted_calibrated": "poisson_promoted"}
+CALIBRATION_METHOD = "cross_fit_by_season"
 
 
 def season_roles(rows: list[dict], validation_seasons: tuple[str, ...] | None = None) -> dict:
@@ -199,6 +201,22 @@ def candidates() -> dict:
     }
 
 
+def cross_fit_temperature(predictions: list[dict]) -> tuple[list[dict], dict]:
+    """검증 예측을 시즌별로 나눠, 각 시즌에는 나머지 시즌에서 고른 보정 계수를 적용한 예측과 시즌별 계수.
+
+    검증 시즌이 하나뿐이면 나눌 수 없으므로 ValueError(같은 자료로 고르고 채점하는 낙관을 조용히 허용하지 않는다).
+    """
+    seasons = sorted({item["season"] for item in predictions})
+    if len(seasons) < 2:
+        raise ValueError(f"교차 보정에는 검증 시즌이 2개 이상 필요합니다: {seasons}")
+    calibrated, temperatures = [], {}
+    for season in seasons:
+        temperatures[season] = fit_temperature([item for item in predictions if item["season"] != season])
+        calibrated += [{**item, "probabilities": sharpen(item["probabilities"], temperatures[season])}
+                       if item["probabilities"] else item for item in predictions if item["season"] == season]
+    return calibrated, temperatures
+
+
 def fit_temperature(predictions: list[dict]) -> float:
     """검증 예측의 로그 손실이 가장 낮아지는 보정 계수. 1이면 보정하지 않는 것과 같다."""
     scored = [item for item in predictions if item["probabilities"] is not None]
@@ -242,19 +260,20 @@ def run(rows: list[dict], conn: psycopg.Connection | None = None) -> dict:
 
     for family, base in CALIBRATED_FROM.items():
         base_maker, base_predictions = chosen[base]
-        temperature = fit_temperature(base_predictions)
-        params = {**base_maker().params, "temperature": temperature}
+        temperature = fit_temperature(base_predictions)   # 시험·운영에 쓰는 계수: 검증 시즌 전체로
+        calibrated, fold_temperatures = cross_fit_temperature(base_predictions)   # 검증 점수용: 교차 보정
+        params = {**base_maker().params, "temperature": temperature, "calibration": CALIBRATION_METHOD}
 
         def make_model(family=family, params=params):
             return model_from_params(family, params)
 
-        calibrated = [{**item, "probabilities": sharpen(item["probabilities"], temperature)} if item["probabilities"]
-                      else item for item in base_predictions]
         summary = summarize(calibrated, rows_by_id)
+        summary["fold_temperatures"] = fold_temperatures
         if conn is not None:
             store_run(conn, make_model(), "VALIDATION", roles["validation"], data_hash, summary, calibrated)
         version = make_model().version
         report["validation"][family] = {"tried": len(TEMPERATURE_GRID), "chosen": version, "temperature": temperature,
+                                        "fold_temperatures": fold_temperatures,
                                         "log_loss": summary["overall"].get("log_loss")}
         test_once(family, make_model, version)
     return report

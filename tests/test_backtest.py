@@ -94,6 +94,20 @@ def test_fit_temperature_sharpens_underconfident_predictions():
     assert backtest.fit_temperature(calibrated) == 1.0
 
 
+def test_cross_fit_scores_each_season_with_the_other_seasons_temperature():
+    # 2021-22는 소극적인 예측(실제 70% 홈 승인데 50%), 2022-23은 이미 맞는 예측
+    under = [{"season": "2021-22", "probabilities": (0.5, 0.25, 0.25), "result": "HOME" if i % 10 < 7 else "AWAY"}
+             for i in range(200)]
+    exact = [{"season": "2022-23", "probabilities": (0.5, 0.25, 0.25),
+              "result": "HOME" if i % 4 < 2 else ("DRAW" if i % 4 == 2 else "AWAY")} for i in range(200)]
+    calibrated, temperatures = backtest.cross_fit_temperature(under + exact)
+    # 2021-22에는 2022-23에서 고른 계수(1.0)를, 2022-23에는 2021-22에서 고른 계수(>1)를 적용한다.
+    assert temperatures["2021-22"] == 1.0 and temperatures["2022-23"] > 1.2
+    assert calibrated[0]["probabilities"] == (0.5, 0.25, 0.25) and calibrated[-1]["probabilities"][0] > 0.5
+    with pytest.raises(ValueError):   # 시즌이 하나면 같은 자료로 고르고 채점하게 되므로 거부
+        backtest.cross_fit_temperature(under)
+
+
 def test_mark_promoted_flags_newcomers_per_season():
     rows = synthetic_rows(("2021-22", "2022-23"))
     rows += [{**rows[-1], "match_id": 999, "home_team": "Z"}]   # 2022-23에 처음 나온 팀
@@ -133,16 +147,18 @@ def test_dataset_hash_changes_when_a_result_changes():
 
 def test_run_selects_on_validation_and_tests_once(monkeypatch):
     monkeypatch.setattr(backtest, "MIN_TRAINING_MATCHES", 5)
-    monkeypatch.setattr(backtest, "VALIDATION_SEASONS", ("2022-23",))
+    monkeypatch.setattr(backtest, "VALIDATION_SEASONS", ("2021-22", "2022-23"))
     monkeypatch.setattr(backtest, "RIDGE_GRID", (1.0, 10.0))
     monkeypatch.setattr(backtest, "HALF_LIFE_GRID", (None,))
-    report = backtest.run(synthetic_rows())
+    report = backtest.run(synthetic_rows(("2020-21", "2021-22", "2022-23", "2023-24")))
     assert report["validation"]["poisson"]["tried"] == 2 and report["validation"]["base_rate"]["tried"] == 1
     assert set(report["test"]["poisson"]["by_season"]) == {"2023-24"}
     assert report["test"]["poisson"]["model_version"] == report["validation"]["poisson"]["chosen"]
     # 보정 계열은 기준 계열에서 고른 설정 + 검증 예측으로 고른 보정 계수
     calibrated = report["validation"]["poisson_calibrated"]
     assert calibrated["chosen"].startswith("poisson_calibrated|") and 0.7 <= calibrated["temperature"] <= 1.6
+    assert calibrated["chosen"].endswith("|calibration=cross_fit_by_season")
+    assert set(calibrated["fold_temperatures"]) == {"2021-22", "2022-23"}
     assert set(report["test"]) == {"base_rate", "poisson", "dixon_coles", "poisson_promoted", "poisson_calibrated",
                                    "poisson_promoted_calibrated"}
 
