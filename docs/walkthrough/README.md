@@ -13,5 +13,6 @@
 | 3b | [기준 모델과 시간순 백테스트](3b_baseline_models.md) | 단순 비율·Poisson·Dixon-Coles, 주 단위 재학습, 검증·시험 시즌 분리, 축소 추정, 시장 대비 결과 |
 | 3c | [평가 보고서](3c_evaluation.md) | 블록 부트스트랩 불확실성, 확률 보정, 승격 팀 과대평가·확률 눌림 발견, 검증 기준(모두 NOT_VALIDATED) |
 | 3d | [경기 전 예측 기록과 주간 채점](3d_prospective_predictions.md) | 스냅샷 순간에만 예측, 실제 수신 자료로 학습, 같은 as_of를 DB가 강제, 검증 전 WITHHELD, 주간 보고서 DAG |
+| 3e | [모델 개선](3e_model_improvements.md) | 승격 첫 시즌 효과, 확률 보정, 2020-21 추가, 검증 두 시즌, 실패와 판단 과정, 시험을 본 횟수 공개 |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md), 주제별(예외 처리·메달리온·기술 스택) 정리는 [면접 준비 문서](../interview/README.md)를 함께 보세요.

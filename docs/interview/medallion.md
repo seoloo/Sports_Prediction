@@ -79,10 +79,10 @@
 
 | 테이블 | 행 | 내용 |
 |---|---|---|
-| `modeling.backtest_runs` | 36 | 실행 기록(모델 버전, 하이퍼파라미터, 검증/시험, 평가 시즌, 데이터셋 해시, 요약 성적) |
-| `modeling.backtest_predictions` | 16,170 | 예측마다 학습 기준 시각, 학습 경기 수, 확률, 결과 |
+| `modeling.backtest_runs` | 93 | 실행 기록(모델 버전, 하이퍼파라미터, 검증/시험, 평가 시즌, 데이터셋 해시, 요약 성적) |
+| `modeling.backtest_predictions` | 62,190 | 예측마다 학습 기준 시각, 학습 경기 수, 확률, 결과 |
 | `modeling.prospective_reports` | 1 | 경기 전 예측의 주간 보고서(3d). 같은 주라도 결과 정정으로 내용이 바뀌면 새 행 |
-| `modeling.evaluation_reports` | 2 | 평가 보고서(어떤 실행을 어떤 방법·기준으로 평가했는지와 결과, 3c). 방법 버전 3c.1·3c.2 |
+| `modeling.evaluation_reports` | 3 | 평가 보고서(어떤 실행을 어떤 방법·기준으로 평가했는지와 결과, 3c). 방법 버전 3c.1·3c.2·3c.3(3e) |
 
 ## Gold: 바로 쓰는 모양
 
