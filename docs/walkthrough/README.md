@@ -11,5 +11,6 @@
 | 2e | [경기 전 자동 스냅샷](2e_prematch_snapshots.md) | 시작 24·3·1시간 전 입력 고정, 놓친 시점은 MISSED, 사전 기록(PROSPECTIVE) 평가의 근거 |
 | 3a | [시간순 학습·평가 데이터셋](3a_dataset.md) | 3단계 계획, 과거 재구성 가정(시작+3시간), 누수 없는 팀 지표, 두 겹의 누수 검사 |
 | 3b | [기준 모델과 시간순 백테스트](3b_baseline_models.md) | 단순 비율·Poisson·Dixon-Coles, 주 단위 재학습, 검증·시험 시즌 분리, 축소 추정, 시장 대비 결과 |
+| 3c | [평가 보고서](3c_evaluation.md) | 블록 부트스트랩 불확실성, 확률 보정, 승격 팀 과대평가·확률 눌림 발견, 검증 기준(모두 NOT_VALIDATED) |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md), 주제별(예외 처리·메달리온·기술 스택) 정리는 [면접 준비 문서](../interview/README.md)를 함께 보세요.

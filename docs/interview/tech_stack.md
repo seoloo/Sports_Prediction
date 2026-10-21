@@ -1,6 +1,6 @@
 # 사용한 기술 스택
 
-작성: 2026-10-21(2단계 완료, 3b 시점). 버전은 저장소에 고정된 값입니다(`requirements*.txt`, `infra/docker-compose.yml`, `infra/*/Dockerfile`).
+작성: 2026-10-21(2단계 완료, 3c 시점). 버전은 저장소에 고정된 값입니다(`requirements*.txt`, `infra/docker-compose.yml`, `infra/*/Dockerfile`).
 
 ## 한눈에 보기
 
@@ -101,7 +101,8 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 - **대안과 판단:** scikit-learn의 `PoissonRegressor`는 관측치 가중치와 벌점을 지원하지만 Dixon-Coles 보정은 없다. statsmodels·scipy는 설치하지 않았다(의존성을 늘릴 만큼 필요하지 않음). Dixon-Coles를 원 논문처럼 모든 계수를 함께 최대화하려면 범용 최적화기(scipy)가 필요해, 지금은 두 단계 근사를 쓰고 그렇다고 문서에 남겼다.
 - **검증:** 정해 둔 계수로 가상 리그를 만들어 학습하면 그 계수를 되찾는지 테스트한다(`tests/test_models.py`).
 - **버전:** 원래 Streamlit을 통해 간접 설치됐는데, 직접 쓰게 되면서 `requirements.txt`에 고정했다.
-- **쓰는 곳:** `pipelines/modeling/models.py`, `pipelines/modeling/backtest.py`.
+- **쓰는 곳:** `pipelines/modeling/models.py`, `pipelines/modeling/backtest.py`, `pipelines/modeling/evaluation.py`(3c 블록 부트스트랩: 주 117개를 2,000번 복원 추출해도 numpy 배열 연산으로 1초 안).
+- **통계 라이브러리 없이:** Wilson 구간·ECE·부트스트랩은 식이 짧아 직접 구현하고 알려진 값으로 테스트했다.
 
 ### Apache Airflow 3.3.2
 
@@ -123,7 +124,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 - **역할:** 푸시할 때 실제 Postgres·SeaweedFS·Kafka를 띄우고 전체 테스트와 종단 간 실행을 돌린다.
 - **구성:** Postgres는 서비스 컨테이너, SeaweedFS와 Kafka는 `docker run`으로 띄운다(서비스 컨테이너는 실행 명령을 바꿀 수 없는데, 두 서비스는 실행 명령·환경 설정이 필요하다).
 - **`REQUIRE_INTEGRATION=1`:** 로컬에서는 서비스가 없으면 통합 테스트를 건너뛰지만, CI에서는 건너뛰기를 실패로 본다. "건너뛰어서 통과"를 막기 위해서다.
-- **최근 결과:** run 39539987948, 테스트 259개 통과, dbt `PASS=28`(모델 6 + 테스트 22). 3b 이후 로컬 전체 테스트는 279개 통과(CI는 다음 푸시 때 실행).
+- **최근 결과:** run 39539987948, 테스트 259개 통과, dbt `PASS=28`(모델 6 + 테스트 22). 3c 이후 로컬 전체 테스트는 287개 통과.
 
 ### Streamlit 1.65.0 + SQLite (기존 개인 앱)
 
@@ -141,7 +142,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 |---|---|---|---|
 | Spark | 여러 리그·수십 시즌·이벤트 단위 자료의 특징 계산 | 지금 데이터(경기 2,280, 배당 16만 행)는 Postgres가 몇 초에 처리한다. 작은 데이터에 Spark를 쓰면 설명하기 어렵다 | 리그 확장으로 Postgres 처리 시간이 문제가 될 때, Parquet로 내보낸 Gold에서 시작 |
 | Kubernetes + Helm | 수집기·소비자·Postgres 배포, 재시작·자원 제한 | Docker Compose로 개인 PC 운영은 충분하다 | 모델·API까지 서비스가 늘었을 때 kind·k3d로 로컬 클러스터부터 |
-| FastAPI + 모바일 웹 | 휴대폰에서 이번 주 예측 확인 | 검증된 모델이 아직 없다(3b 백테스트에서 시장 배당보다 부정확). 검증 전 확률은 보여 주지 않는다 | 3d 주간 보고서가 생긴 뒤 |
+| FastAPI + 모바일 웹 | 휴대폰에서 이번 주 예측 확인 | 검증된 모델이 아직 없다(3c 평가에서 모든 모델 NOT_VALIDATED). 검증 전 확률은 보여 주지 않는다 | 3d 주간 보고서가 생긴 뒤 |
 
 ## 버전을 고정하는 이유
 
