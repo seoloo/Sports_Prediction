@@ -36,6 +36,25 @@ def ensure_topics(settings: Settings | None = None, topics: dict | None = None) 
     return [topic.topic for topic in wanted]
 
 
+def delete_topics(names: list[str], settings: Settings | None = None, timeout: float = 30) -> None:
+    """토픽을 지우고 삭제가 끝날 때까지 기다린다(테스트·재생용 임시 토픽 정리).
+
+    AdminClient.delete_topics는 요청만 보내고 바로 돌아오므로, 결과를 기다리지 않으면
+    프로그램이 먼저 끝나 삭제가 일어나지 않을 수 있다.
+    클라이언트를 변수에 붙잡아 두는 것도 중요하다. admin(...).delete_topics(...)처럼 한 줄로 쓰면
+    결과를 기다리는 동안 클라이언트가 정리되어 "Broker handle destroyed" 오류로 삭제가 끝나지 않는다.
+    """
+    if not names:
+        return
+    client = admin(settings)
+    for name, future in client.delete_topics(names, operation_timeout=timeout).items():
+        try:
+            future.result()
+        except KafkaException as exc:
+            if exc.args[0].code() != 3:  # UNKNOWN_TOPIC_OR_PART: 이미 없는 토픽
+                raise
+
+
 def producer(settings: Settings | None = None, client_id: str = "sports-pipeline") -> Producer:
     return Producer({"bootstrap.servers": (settings or load_settings()).kafka_bootstrap,
                      "client.id": client_id, "enable.idempotence": True, "acks": "all",

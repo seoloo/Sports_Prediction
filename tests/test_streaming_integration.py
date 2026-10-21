@@ -35,7 +35,7 @@ def stream(isolated_settings, tmp_path):
         f"football-data-org,{i},{name} FC,test\n" for i, name in enumerate(["Alpha", "Beta", "Gamma", "Delta"], 1)),
         encoding="utf-8")
     yield isolated_settings, topic, aliases
-    kafka_io.admin(isolated_settings).delete_topics([topic])
+    kafka_io.delete_topics([topic], isolated_settings)
 
 
 def match_event(*, score, published, match_id="9001", home="1", away="2", status="FINISHED"):

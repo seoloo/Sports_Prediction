@@ -106,8 +106,7 @@ def replay_season(season: str, *, source_settings=None, target_settings=None, to
     # 재생은 매번 깨끗한 상태에서 시작한다: 재생 DB를 새로 만들고(위), 재생 토픽도 지우고 다시 만든다.
     client = kafka_io.admin(source_settings)
     if topic in client.list_topics(timeout=10).topics:
-        for future in client.delete_topics([topic]).values():
-            future.result()
+        kafka_io.delete_topics([topic], source_settings)
         for _ in range(50):
             if topic not in client.list_topics(timeout=10).topics:
                 break
