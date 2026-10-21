@@ -37,7 +37,7 @@ def known_fixtures(conn: psycopg.Connection, as_of: datetime) -> list[dict]:
     return [dict(zip(FIXTURE_COLUMNS, row)) for row in conn.execute(KNOWN_FIXTURES_SQL, {"as_of": as_of}).fetchall()]
 
 
-def active_model(conn: psycopg.Connection) -> dict | None:
+def active_model(conn: psycopg.Connection, competition: str = "en.1") -> dict | None:
     """3b 시험 실행 중 검증 로그 손실이 가장 낮은 모델과, 그 실행을 평가한 가장 최근 3c 보고서의 검증 상태.
 
     시장 결합(market_blend, 3g)은 뺀다. 경기 전 시점에 쓸 시장 배당(다가올 경기의 평균 배당)이 없기 때문이다.
@@ -48,13 +48,15 @@ def active_model(conn: psycopg.Connection) -> dict | None:
         FROM modeling.backtest_runs t
         JOIN modeling.backtest_runs v ON v.purpose = 'VALIDATION' AND v.model_version = t.model_version
                                       AND v.dataset_hash = t.dataset_hash
-        WHERE t.purpose = 'TEST' AND t.model_name NOT LIKE 'market_blend%'
-        ORDER BY t.model_name, t.run_id DESC""").fetchall()
+                                      AND v.competition_code = t.competition_code
+        WHERE t.purpose = 'TEST' AND t.model_name NOT LIKE 'market_blend%%' AND t.competition_code = %s
+        ORDER BY t.model_name, t.run_id DESC""", (competition,)).fetchall()
     if not candidates:
         return None
     name, run_id, version, params, validation_loss = min(candidates, key=lambda row: row[4])
     report = conn.execute("""SELECT report_id, results->'models'->%s->'gate' FROM modeling.evaluation_reports
-                             WHERE %s = ANY(run_ids) ORDER BY report_id DESC LIMIT 1""", (name, run_id)).fetchone()
+                             WHERE %s = ANY(run_ids) AND competition_code = %s ORDER BY report_id DESC LIMIT 1""",
+                          (name, run_id, competition)).fetchone()
     gate = report[1] if report and report[1] else None
     return {"name": name, "run_id": run_id, "model_version": version, "params": params,
             "validation_log_loss": validation_loss, "report_id": report[0] if report else None,
@@ -71,12 +73,12 @@ def build_model(active: dict):
 class Predictor:
     """스냅샷 실행 한 번(같은 as_of)에서 한 번만 학습하고 여러 경기를 예측한다."""
 
-    def __init__(self, conn: psycopg.Connection, as_of: datetime):
-        self.as_of = as_of
-        self.active = active_model(conn)
+    def __init__(self, conn: psycopg.Connection, as_of: datetime, competition: str = "en.1"):
+        self.as_of, self.competition = as_of, competition
+        self.active = active_model(conn, competition)
         self.model, self.reasons = None, []
-        # 5a: 모델은 학습·평가한 리그(MODELED)의 경기로만 학습한다. 다른 리그는 예측하지 않는다(LEAGUE_NOT_MODELED).
-        fixtures = [row for row in known_fixtures(conn, as_of) if row["competition_code"] in MODELED]
+        # 5c: 리그마다 그 리그 경기로만 학습하고, 그 리그에서 평가받은 모델을 쓴다.
+        fixtures = [row for row in known_fixtures(conn, as_of) if row["competition_code"] == competition]
         # 시즌별 승격 팀(3e). 시즌 참가 팀은 일정이 나올 때 이미 알려진다.
         self.promoted = promoted_by_season((row["season"], row["home"], row["away"]) for row in fixtures)
         finished = sorted((row for row in fixtures
@@ -161,9 +163,10 @@ def record_for_snapshot(conn: psycopg.Connection, match_id: int, offset_label: s
     """방금 찍은 스냅샷에 모델 예측을 붙인다. 예측이 실패해도 스냅샷은 지키고 실패 사유를 WITHHELD로 남긴다."""
     try:
         with conn.transaction():   # 저장점: 실패하면 이 예측만 취소
-            if as_of not in cache:
-                cache[as_of] = Predictor(conn, as_of)
-            row = cache[as_of].predict(home, away, season, kickoff, competition)
+            key = (as_of, competition or "en.1")
+            if key not in cache:
+                cache[key] = Predictor(conn, as_of, competition or "en.1")
+            row = cache[key].predict(home, away, season, kickoff, competition)
             insert_prediction(conn, match_id, offset_label, as_of, row)
             return row["display_status"]
     except Exception as exc:   # noqa: BLE001 (예측 실패가 입력 스냅샷까지 잃게 하지 않는다)
@@ -238,6 +241,7 @@ def weekly_summary(conn: psycopg.Connection, week_start: date, as_of: datetime) 
     scored = scored_predictions(conn, as_of)
     this_week = [item for item in scored if start <= item["kickoff_utc"] < end]
     active = active_model(conn)
+    leagues = {code: active_model(conn, code) for code in MODELED}   # 5c: 리그별 활성 모델
     return {"week_start": week_start.isoformat(), "as_of": as_of.isoformat(), "mode": MODE,
             "active_model": active and {key: active[key] for key in ("name", "model_version", "run_id", "report_id",
                                                                      "gate_status", "gate_reasons")},
@@ -245,6 +249,8 @@ def weekly_summary(conn: psycopg.Connection, week_start: date, as_of: datetime) 
             "withheld_reasons": dict(reasons),
             "week": {label: metrics([i for i in this_week if i["offset_label"] == label]) for label in ("T-24H", "T-3H", "T-1H")},
             "cumulative": {label: metrics([i for i in scored if i["offset_label"] == label]) for label in ("T-24H", "T-3H", "T-1H")},
+            "league_models": {code: model and {"name": model["name"], "gate_status": model["gate_status"]}
+                              for code, model in leagues.items()}}
 
 
 def store_weekly(conn: psycopg.Connection, summary: dict) -> tuple[int, bool]:

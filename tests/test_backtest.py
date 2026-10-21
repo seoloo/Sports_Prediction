@@ -160,11 +160,10 @@ def test_run_selects_on_validation_and_tests_once(monkeypatch):
     assert calibrated["chosen"].endswith("|calibration=cross_fit_by_season")
     assert set(calibrated["fold_temperatures"]) == {"2021-22", "2022-23"}
     assert set(report["test"]) == {"base_rate", "poisson", "dixon_coles", "poisson_promoted", "poisson_calibrated",
-                                   "poisson_promoted_calibrated", "poisson_plus", "poisson_plus_calibrated",
-                                   "market_blend"}
+                                   "poisson_promoted_calibrated", "poisson_plus", "poisson_plus_calibrated"}
     assert report["validation"]["poisson_plus"]["tried"] == 20
-    # 가상 자료에는 시장 배당이 없으므로 시장 결합은 확률 없이 모두 보류
-    assert report["test"]["market_blend"]["overall"]["withheld"] == report["test"]["market_blend"]["overall"]["matches"]
+    # 가상 자료에는 과거 시장 배당이 없으므로 시장 결합은 만들지 않는다(5c)
+    assert report["validation"]["market_blend"] == {"skipped": "NO_MARKET_HISTORY", "market_coverage": 0.0}
 
 
 @pytest.fixture
@@ -232,3 +231,14 @@ def test_training_tuple_carries_stats_and_rest():
     match = backtest.training_tuple(row)
     assert (match.home_sot, match.away_sot, match.red_cards, match.home_rest, match.away_rest, match.home_new) == (
         6, 3, 1, 4.5, None, True)
+
+
+def test_same_model_in_two_leagues_is_two_runs(stored):
+    s, prediction = stored
+    model = PoissonModel(ridge=10, half_life_days=180)
+    with psycopg.connect(s.postgres_conninfo) as conn:
+        epl = backtest.store_run(conn, model, "TEST", ["2025-26"], "e" * 64, {"overall": {}}, [prediction], "en.1")
+        german = backtest.store_run(conn, model, "TEST", ["2025-26"], "e" * 64, {"overall": {}}, [prediction], "de.1")
+        again = backtest.store_run(conn, model, "TEST", ["2025-26"], "e" * 64, {"overall": {}}, [prediction], "de.1")
+    assert epl[0] != german[0] and again == (german[0], False)
+    assert query(s, "SELECT competition_code FROM modeling.backtest_runs WHERE run_id = %s", (german[0],)) == [("de.1",)]

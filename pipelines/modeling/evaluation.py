@@ -41,12 +41,13 @@ COMPARISONS = (("poisson", "base_rate"), ("dixon_coles", "poisson"), ("poisson_p
 TIMING_LABELS = {"market_pre": "시장 마감 전 배당", "market_close": "시장 마감 배당"}
 
 
-def load_test_predictions(conn: psycopg.Connection) -> tuple[dict, dict]:
-    """모델 계열별 가장 최근 TEST 실행의 예측과 그 실행 정보. 예측에는 팀·시장 확률을 붙인다."""
+def load_test_predictions(conn: psycopg.Connection, competition: str = "en.1") -> tuple[dict, dict]:
+    """한 리그에서 모델 계열별 가장 최근 TEST 실행의 예측과 그 실행 정보. 예측에는 팀·시장 확률을 붙인다."""
     runs = {name: {"run_id": run_id, "model_version": version, "dataset_hash": data_hash}
             for name, run_id, version, data_hash in conn.execute("""
                 SELECT DISTINCT ON (model_name) model_name, run_id, model_version, dataset_hash
-                FROM modeling.backtest_runs WHERE purpose = 'TEST' ORDER BY model_name, run_id DESC""").fetchall()}
+                FROM modeling.backtest_runs WHERE purpose = 'TEST' AND competition_code = %s
+                ORDER BY model_name, run_id DESC""", (competition,)).fetchall()}
     cursor = conn.execute("""
         SELECT r.model_name, p.match_id, p.season, p.kickoff_utc, p.fit_cutoff, p.prob_home, p.prob_draw, p.prob_away,
                p.result, f.home_team, f.away_team, f.market_pre_home, f.market_pre_draw, f.market_pre_away,
@@ -126,10 +127,11 @@ def calibration(items: list[dict], probabilities=lambda item: item["probabilitie
     return report
 
 
-def teams_by_season(conn: psycopg.Connection) -> dict:
-    """데이터셋 전체(학습 전용 시즌 포함)의 시즌별 참가 팀. 승격 팀 = 직전 시즌에 없던 팀."""
+def teams_by_season(conn: psycopg.Connection, competition: str = "en.1") -> dict:
+    """한 리그 데이터셋 전체(학습 전용 시즌 포함)의 시즌별 참가 팀. 승격 팀 = 직전 시즌에 없던 팀."""
     teams = defaultdict(set)
-    for season, home, away in conn.execute("SELECT season, home_team, away_team FROM gold.match_features_pit").fetchall():
+    for season, home, away in conn.execute("""SELECT season, home_team, away_team FROM gold.match_features_pit
+                                              WHERE competition_code = %s""", (competition,)).fetchall():
         teams[season] |= {home, away}
     return dict(teams)
 
@@ -168,8 +170,9 @@ def segments(items: list[dict], all_teams_by_season: dict) -> dict:
             promoted_win["predicted"], promoted_win["actual"], promoted_win["matches"])
     draws = sum(item["result"] == "DRAW" for item in items)
     report["draws"] = {**rate_check(sum(i["probabilities"][1] for i in items), draws, len(items)),
-                       "market_close_rate": round(sum(i["market_close"][1] for i in items if i["market_close"])
-                                                  / max(1, sum(1 for i in items if i["market_close"])), 3)}
+                       "market_close_rate": (round(sum(i["market_close"][1] for i in items if i["market_close"])
+                                                   / sum(1 for i in items if i["market_close"]), 3)
+                                             if any(i["market_close"] for i in items) else None)}
     return report
 
 
@@ -197,7 +200,9 @@ def gate(model_report: dict) -> dict:
     if worst_ece > GATE["max_ece"]:
         reasons.append(f"보정 오차(가장 나쁜 결과의 ECE) {worst_ece:.3f} > 기준 {GATE['max_ece']}")
     versus = model_report["vs_" + GATE["must_beat"]]
-    if versus is None or versus["ci95"][1] >= 0:
+    if versus is None:
+        reasons.append(f"{TIMING_LABELS[GATE['must_beat']]}과 비교할 과거 자료 없음(이 리그의 과거 배당을 받지 않음)")
+    elif versus["ci95"][1] >= 0:
         reasons.append(f"{TIMING_LABELS[GATE['must_beat']]}보다 확실히 낫지 않음(로그 손실 차이 95% 구간 상한 "
                        f"{'없음' if versus is None else versus['ci95'][1]} ≥ 0)")
     return {"status": "NOT_VALIDATED" if reasons else "VALIDATED", "reasons": reasons}
@@ -235,10 +240,10 @@ def store_report(conn: psycopg.Connection, report: dict) -> tuple[int, bool]:
     method_hash = hashlib.sha256(json.dumps(METHOD, sort_keys=True, default=str).encode()).hexdigest()
     with conn.transaction():
         inserted = conn.execute("""
-            INSERT INTO modeling.evaluation_reports (run_ids, method_hash, method, results, created_at)
-            VALUES (%s::bigint[], %s, %s, %s, %s) ON CONFLICT (run_ids, method_hash) DO NOTHING RETURNING report_id""",
+            INSERT INTO modeling.evaluation_reports (run_ids, method_hash, method, results, created_at, competition_code)
+            VALUES (%s::bigint[], %s, %s, %s, %s, %s) ON CONFLICT (run_ids, method_hash) DO NOTHING RETURNING report_id""",
             (run_ids, method_hash, Jsonb(METHOD), Jsonb(json.loads(json.dumps(report, default=str))),
-             datetime.now(timezone.utc))).fetchone()
+             datetime.now(timezone.utc), report.get("competition", "en.1"))).fetchone()
         if inserted:
             return inserted[0], True
         return conn.execute("SELECT report_id FROM modeling.evaluation_reports WHERE run_ids = %s::bigint[] AND method_hash = %s",
@@ -260,7 +265,9 @@ def interval(result: dict | None) -> str:
 
 def render_markdown(report: dict) -> str:
     """평가 결과를 사람이 읽는 보고서로. 숫자는 report에서만 가져온다."""
-    lines = ["# EPL 기준 모델 평가 보고서", "",
+    from ..leagues import BY_CODE
+    league = BY_CODE.get(report.get("competition", "en.1"))
+    lines = [f"# {'EPL' if league is None or league.code == 'en.1' else league.name} 기준 모델 평가 보고서", "",
              "`python -m pipelines.modeling.evaluation`이 만든 문서입니다. 직접 고치지 말고 다시 생성하세요.", "",
              "- 대상: 3b 시험(TEST) 백테스트의 끝난 경기. 과거 재구성 가정(결과는 시작 3시간 뒤 공개) 위의 결과입니다.",
              f"- 불확실성: 주 단위 블록 부트스트랩 {BOOTSTRAP_SAMPLES}회(seed {BOOTSTRAP_SEED}). "
@@ -283,7 +290,8 @@ def render_markdown(report: dict) -> str:
                   "시장 마감(참고)": report["market_close_calibration"]}
     lines += ["| 대상 | " + " | ".join(f"{OUTCOME_LABELS[o]} ECE" for o in OUTCOMES) + " |", "|---|---|---|---|"]
     for label, result in calibrated.items():
-        lines.append(f"| {label} | " + " | ".join(f"{result[o]['ece']:.4f}" for o in OUTCOMES) + " |")
+        if all(result[o]["ece"] is not None for o in OUTCOMES):   # 시장 배당이 없는 리그는 시장 행을 건너뛴다
+            lines.append(f"| {label} | " + " | ".join(f"{result[o]['ece']:.4f}" for o in OUTCOMES) + " |")
     for name in ("market_blend", "poisson_calibrated", "dixon_coles", "poisson"):
         if name not in report["models"]:
             continue
@@ -315,7 +323,7 @@ def render_markdown(report: dict) -> str:
         promoted = rate(model["segments"].get("promoted_early", {}).get("promoted_team_win"))
         draws = model["segments"]["draws"]
         lines.append(f"| {LABELS.get(name, name)} | {promoted[0]} | {promoted[1]} | {rate(draws)[0]} | {rate(draws)[1]} | "
-                     f"{draws['market_close_rate']:.3f} |")
+                     f"{'—' if draws['market_close_rate'] is None else format(draws['market_close_rate'], '.3f')} |")
     lines += ["", "확신 정도(세 확률 중 가장 큰 값의 평균, 같은 경기). 모델이 시장보다 작으면 확률을 가운데로 눌러 내는 것입니다.", "",
               "| 모델 | 모델 | 시장 마감 |", "|---|---|---|"]
     for name, model in report["models"].items():
@@ -330,26 +338,36 @@ def render_markdown(report: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def report_path(directory: Path, competition: str) -> Path:
+    """리그별 보고서 파일. EPL은 처음부터 쓰던 이름을 유지한다."""
+    return directory / ("epl_baseline_evaluation.md" if competition == "en.1" else f"evaluation_{competition}.md")
+
+
 def main(argv=None) -> None:
-    parser = argparse.ArgumentParser(description="기준 모델 평가 보고서(3c)")
-    parser.add_argument("--markdown", type=Path, help="Markdown 보고서를 저장할 경로")
+    from ..leagues import MODELED
+    parser = argparse.ArgumentParser(description="기준 모델 평가 보고서(3c, 5c부터 리그별)")
+    parser.add_argument("--markdown-dir", type=Path, help="리그별 Markdown 보고서를 저장할 폴더(예: docs/reports)")
+    parser.add_argument("--competition", nargs="*", default=list(MODELED), help="리그 코드(기본: 다섯 리그 모두)")
     parser.add_argument("--no-store", action="store_true", help="DB에 기록하지 않는다")
     args = parser.parse_args(argv)
+    output = {}
     with connect(load_settings()) as conn:
         migrate(conn)
-        predictions, runs = load_test_predictions(conn)
-        if not predictions:
-            raise SystemExit("시험(TEST) 백테스트가 없습니다. 먼저 python -m pipelines.modeling.backtest를 실행하세요.")
-        report = evaluate(predictions, runs, teams_by_season(conn))
-        if not args.no_store:
-            report["report_id"], report["newly_stored"] = store_report(conn, report)
-    if args.markdown:
-        args.markdown.parent.mkdir(parents=True, exist_ok=True)
-        args.markdown.write_text(render_markdown(report), encoding="utf-8")
-    summary = {name: {key: model[key] for key in ("matches", "log_loss", "vs_market_pre", "vs_market_close", "gate")}
-               for name, model in report["models"].items()}
-    print(json.dumps({"report_id": report.get("report_id"), "newly_stored": report.get("newly_stored"),
-                      "models": summary, "comparisons": report["comparisons"]}, ensure_ascii=False, indent=2, default=str))
+        for competition in args.competition:
+            predictions, runs = load_test_predictions(conn, competition)
+            if not predictions:
+                output[competition] = "시험(TEST) 백테스트 없음. 먼저 python -m pipelines.modeling.backtest를 실행하세요."
+                continue
+            report = {"competition": competition, **evaluate(predictions, runs, teams_by_season(conn, competition))}
+            if not args.no_store:
+                report["report_id"], report["newly_stored"] = store_report(conn, report)
+            if args.markdown_dir:
+                args.markdown_dir.mkdir(parents=True, exist_ok=True)
+                report_path(args.markdown_dir, competition).write_text(render_markdown(report), encoding="utf-8")
+            output[competition] = {"report_id": report.get("report_id"), "newly_stored": report.get("newly_stored"),
+                                   "models": {name: {key: model[key] for key in ("matches", "log_loss", "vs_market_pre", "gate")}
+                                              for name, model in report["models"].items()}}
+    print(json.dumps(output, ensure_ascii=False, indent=2, default=str))
 
 
 if __name__ == "__main__":

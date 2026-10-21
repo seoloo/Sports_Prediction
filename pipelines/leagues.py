@@ -4,7 +4,8 @@
 - fdorg: football-data.org 대회 코드(무료 등급에서 확인: PL, BL1, PD, SA, DED)
 - odds_api: The Odds API 리그 키(5b에서 사용)
 - couk: football-data.co.uk 리그 코드(과거 배당 CSV 파일 이름)
-MODELED: 모델을 학습·평가한 리그. 나머지 리그의 경기 전 예측은 확률 없이 LEAGUE_NOT_MODELED로 보류한다.
+MODELED: 모델을 학습·평가하는 리그(5c부터 다섯 리그 모두). 목록 밖 리그의 경기 전 예측은 확률 없이
+LEAGUE_NOT_MODELED로 보류한다. 리그마다 따로 학습·평가하고, 활성 모델도 리그별로 고른다.
 """
 from dataclasses import dataclass
 
@@ -28,4 +29,4 @@ LEAGUES = (
 )
 BY_CODE = {league.code: league for league in LEAGUES}
 BY_FDORG = {league.fdorg: league for league in LEAGUES}
-MODELED = ("en.1",)
+MODELED = tuple(league.code for league in LEAGUES)

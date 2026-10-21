@@ -177,20 +177,20 @@ def dataset_hash(rows: list[dict]) -> str:
 
 
 def store_run(conn: psycopg.Connection, model, purpose: str, eval_seasons: list[str], data_hash: str,
-              summary: dict, predictions: list[dict]) -> tuple[int, bool]:
+              summary: dict, predictions: list[dict], competition: str = "en.1") -> tuple[int, bool]:
     """실행과 예측을 한 트랜잭션으로 저장한다. 같은 실행이 이미 있으면 그대로 두고 (run_id, False)를 돌려준다."""
     with conn.transaction():
         inserted = conn.execute("""
             INSERT INTO modeling.backtest_runs (model_name, model_version, params, purpose, eval_seasons,
-                                                dataset_hash, mode, availability_rule, summary, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (model_version, purpose, eval_seasons, dataset_hash) DO NOTHING RETURNING run_id""",
+                                                dataset_hash, mode, availability_rule, summary, created_at, competition_code)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (competition_code, model_version, purpose, eval_seasons, dataset_hash) DO NOTHING RETURNING run_id""",
             (model.name, model.version, Jsonb(model.params), purpose, eval_seasons, data_hash, MODE,
-             AVAILABILITY_RULE, Jsonb(summary), datetime.now(timezone.utc))).fetchone()
+             AVAILABILITY_RULE, Jsonb(summary), datetime.now(timezone.utc), competition)).fetchone()
         if inserted is None:
-            existing = conn.execute("""SELECT run_id FROM modeling.backtest_runs WHERE model_version = %s
-                                       AND purpose = %s AND eval_seasons = %s AND dataset_hash = %s""",
-                                    (model.version, purpose, eval_seasons, data_hash)).fetchone()
+            existing = conn.execute("""SELECT run_id FROM modeling.backtest_runs WHERE competition_code = %s
+                                       AND model_version = %s AND purpose = %s AND eval_seasons = %s AND dataset_hash = %s""",
+                                    (competition, model.version, purpose, eval_seasons, data_hash)).fetchone()
             return existing[0], False
         run_id = inserted[0]
         with conn.cursor().copy("""COPY modeling.backtest_predictions (run_id, match_id, season, kickoff_utc, fit_cutoff,
@@ -267,19 +267,25 @@ def fit_temperature(predictions: list[dict]) -> float:
     return min(losses, key=lambda temperature: (losses[temperature], abs(temperature - 1)))
 
 
-def run(rows: list[dict], conn: psycopg.Connection | None = None) -> dict:
-    """검증 시즌에서 계열별 최선의 설정을 고르고, 그 설정만 시험 시즌에 한 번 평가한다. conn이 있으면 기록한다."""
+MIN_MARKET_COVERAGE = 0.5   # 검증 예측의 절반 이상에 과거 시장 배당이 있어야 시장 결합을 만든다(5c)
+
+
+def run(rows: list[dict], conn: psycopg.Connection | None = None, competition: str = "en.1") -> dict:
+    """검증 시즌에서 계열별 최선의 설정을 고르고, 그 설정만 시험 시즌에 한 번 평가한다. conn이 있으면 기록한다.
+
+    rows는 한 리그의 경기다(5c: 리그마다 따로 학습·평가). 기록에는 리그를 붙인다.
+    """
     roles = season_roles(rows, VALIDATION_SEASONS)
     rows = mark_promoted(rows)
     rows_by_id = {row["match_id"]: row for row in rows}
     data_hash = dataset_hash(rows)
-    report = {"seasons": roles, "dataset_hash": data_hash, "validation": {}, "test": {}}
+    report = {"competition": competition, "seasons": roles, "dataset_hash": data_hash, "validation": {}, "test": {}}
     chosen = {}   # 계열 → (만드는 함수, 검증 예측(점수를 매긴 그대로), 시험 예측)
 
     def record(purpose, model, seasons, predictions):
         summary = summarize(predictions, rows_by_id)
         if conn is not None:
-            run_id, created = store_run(conn, model, purpose, seasons, data_hash, summary, predictions)
+            run_id, created = store_run(conn, model, purpose, seasons, data_hash, summary, predictions, competition)
             summary["run_id"], summary["newly_stored"] = run_id, created
         return summary
 
@@ -330,6 +336,10 @@ def run(rows: list[dict], conn: psycopg.Connection | None = None) -> dict:
     base_family = min((family for family in chosen if family != "base_rate"),
                       key=lambda family: report["validation"][family]["log_loss"])
     base_maker, base_validation, base_test = chosen[base_family]
+    covered = sum(1 for item in base_validation if markets.get(item["match_id"])) / max(1, len(base_validation))
+    if covered < MIN_MARKET_COVERAGE:   # 과거 시장 배당이 없는 리그(5c): 결합을 만들 근거가 없다
+        report["validation"]["market_blend"] = {"skipped": "NO_MARKET_HISTORY", "market_coverage": round(covered, 3)}
+        return report
     seasons = sorted({item["season"] for item in base_validation})
     fold_weights = {season: fit_market_weight([i for i in base_validation if i["season"] != season], markets)
                     for season in seasons}
@@ -345,14 +355,18 @@ def run(rows: list[dict], conn: psycopg.Connection | None = None) -> dict:
 
 
 def main(argv=None) -> None:
-    parser = argparse.ArgumentParser(description="기준 모델 시간순 백테스트(3b)")
+    parser = argparse.ArgumentParser(description="기준 모델 시간순 백테스트(3b, 5c부터 리그별)")
     parser.add_argument("--no-store", action="store_true", help="결과를 DB에 기록하지 않고 출력만 한다")
+    parser.add_argument("--competition", nargs="*", default=list(MODELED), help="리그 코드(기본: 다섯 리그 모두)")
     args = parser.parse_args(argv)
+    reports = {}
     with connect(load_settings()) as conn:
         migrate(conn)
-        rows = attach_stats(load_dataset(conn, finished_only=False, competitions=MODELED), load_match_stats(conn))
-        report = run(rows, None if args.no_store else conn)
-    print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        stats = load_match_stats(conn)
+        for competition in args.competition:
+            rows = attach_stats(load_dataset(conn, finished_only=False, competitions=(competition,)), stats)
+            reports[competition] = run(rows, None if args.no_store else conn, competition)
+    print(json.dumps(reports, ensure_ascii=False, indent=2, default=str))
 
 
 if __name__ == "__main__":

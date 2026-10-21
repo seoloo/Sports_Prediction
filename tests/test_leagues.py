@@ -15,7 +15,7 @@ def test_league_table_is_consistent():
     assert fdorg.COMPETITION_TO_LEAGUE == {"PL": "en.1", "BL1": "de.1", "PD": "es.1", "SA": "it.1", "DED": "nl.1"}
     # openfootball 현지 시각을 UTC로 바꿀 시간대가 모든 리그에 있어야 한다.
     assert all(LEAGUE_TIMEZONES[league.code] == league.timezone for league in LEAGUES)
-    assert set(MODELED) <= set(codes)
+    assert set(MODELED) == set(codes)   # 5c: 다섯 리그 모두 리그별로 학습·평가
 
 
 def test_poller_cycles_through_competitions_and_survives_one_failure(monkeypatch):
@@ -51,7 +51,7 @@ def test_unmodeled_league_is_withheld_without_probabilities():
     predictor.promoted, predictor.last_played = {}, {}
     from collections import Counter
     predictor.history = Counter()
-    row = predictor.predict("FC Bayern München", "Borussia Dortmund", "2026-27",
-                            datetime(2026, 10, 24, tzinfo=timezone.utc), "de.1")
+    row = predictor.predict("Paris Saint-Germain FC", "Olympique de Marseille", "2026-27",
+                            datetime(2026, 10, 24, tzinfo=timezone.utc), "fr.1")   # 다루지 않는 리그
     assert row["probabilities"] is None and row["withheld_reasons"] == ["LEAGUE_NOT_MODELED"]
     assert predictor.predict("A", "B", competition="en.1")["withheld_reasons"][0] == "MODEL_NOT_VALIDATED"
