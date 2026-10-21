@@ -36,6 +36,10 @@
 | [pipelines/streaming/match_consumer.py](../pipelines/streaming/match_consumer.py) | 소비자: 중복·늦은 이벤트 처리, DB 커밋 후 오프셋 커밋, 토픽별 처리 함수 | `handle_match_event`, `run` |
 | [pipelines/streaming/replay.py](../pipelines/streaming/replay.py) | 과거 시즌 재생 + 장애 주입 + 최종 상태 검증 | `inject_faults`, `replay_season` |
 | [pipelines/snapshots.py](../pipelines/snapshots.py) | 경기 시작 24·3·1시간 전 입력 스냅샷(놓친 시점은 MISSED) | `decide`, `build_inputs`, `run` |
+| [pipelines/lake/export.py](../pipelines/lake/export.py) | Gold → Parquet(lake 버킷, 시즌 파티션, 내용 해시 스냅샷, 정답 dbt 결과 포함)(4a) | `export`, `snapshot_id`, `to_parquet` |
+| [pipelines/lake/spark_features.py](../pipelines/lake/spark_features.py) | Spark로 시간순 특징 재계산(조인 + row_number), 결과 업로드(4a) | `compute_features`, `run` |
+| [pipelines/lake/reconcile.py](../pipelines/lake/reconcile.py) | Spark 결과 ↔ dbt 결과 행·열 대조(pyarrow)(4a) | `reconcile`, `same` |
+| [pipelines/lake/run.py](../pipelines/lake/run.py) | export → spark → reconcile 실행(실패 시 종료 코드 1) | `main` |
 | [pipelines/dbt_runner.py](../pipelines/dbt_runner.py) | `.env` 접속 정보를 넘겨 별도 가상환경의 dbt 실행 | `run_dbt` |
 | [pipelines/schedule.py](../pipelines/schedule.py) | 날짜 → 수집할 시즌 이름(순수 함수) | `seasons_for` |
 | [pipelines/modeling/dataset.py](../pipelines/modeling/dataset.py) | 시간순 데이터셋 읽기, Python 독립 재계산으로 누수 검사(3a) | `load_dataset`, `verify_point_in_time` |

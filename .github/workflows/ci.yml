@@ -85,6 +85,14 @@ jobs:
       - name: Tests (unit + integration)
         run: python -m pytest -q -rs
 
+      # Spark 테스트는 pyspark가 있는 Spark 이미지 안에서 돈다. REQUIRE_SPARK=1이면 pyspark가 없을 때 건너뛰지 않고 실패한다.
+      - name: Spark tests in the Spark image
+        run: |
+          docker build -f infra/spark/Dockerfile -t sports-prediction-spark:ci .
+          docker run --rm -e REQUIRE_SPARK=1 \
+            -v "$PWD/pipelines:/opt/project/pipelines:ro" -v "$PWD/tests:/opt/project/tests:ro" \
+            sports-prediction-spark:ci python -m pytest tests/test_spark_features.py -q -p no:cacheprovider
+
       - name: End-to-end smoke run (fixture → Bronze/Silver → dbt Gold)
         run: |
           python -m pipelines.db migrate

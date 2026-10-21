@@ -1,0 +1,7 @@
+# Spark 작업 컨테이너(로드맵 4a) 의존성. Windows에서 Spark로 파일을 쓰려면 winutils가 필요해 컨테이너(Linux)에서만 돌린다.
+# 내보내기(Postgres → Parquet)와 대조도 같은 컨테이너에서 돌 수 있게 psycopg·boto3·pyarrow를 함께 둔다.
+pyspark==4.1.3
+pyarrow==25.0.1
+psycopg[binary]==3.3.6
+boto3==1.43.115
+pytest==9.1.1

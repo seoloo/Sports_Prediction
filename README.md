@@ -125,6 +125,17 @@ docker compose --env-file .env -f infra/docker-compose.yml --profile streaming u
 - 과거 시즌 재생(중복·늦은 이벤트를 섞어 소비자 검증, 별도 `sports_replay` DB 사용): `.\.venv\Scripts\python.exe -m pipelines.streaming.replay --season 2025-26`
 - 경기 중 실시간(인플레이) 예측은 하지 않습니다. 무료 API라 초 단위가 아니라 분 단위입니다. PC와 Docker Desktop이 켜져 있을 때만 돕니다.
 
+### 데이터 레이크와 Spark (로드맵 4a)
+
+Gold를 Parquet로 S3 `lake` 버킷에 내보내고, Spark 컨테이너가 시간순 특징을 다시 계산해 dbt 결과와 행 단위로 대조합니다([해설](docs/walkthrough/4a_spark_lake.md)). 마지막의 `"passed": true`를 확인합니다.
+
+~~~powershell
+docker compose --env-file .env -f infra/docker-compose.yml --profile spark run --rm spark-features
+~~~
+
+- Spark 없이 내보내기·대조만: `.\.venv\Scripts\python.exe -m pipelines.lake.run export` / `... reconcile`
+- 검증 체계 전체(데이터 형식 → 시점 누수 → 구현 동등성 → 모델 성능 → 운영 성능): [검증 체계](docs/interview/validation.md)
+
 ## 처음 사용하는 순서
 
 1. **데이터 소스:** 직접 작성한 자료 또는 로컬 저장 사용권이 확인된 자료의 소스 ID·이름·출처·확인 근거를 등록합니다. 권한 확인 체크가 없는 소스는 PENDING이며 입력에 사용할 수 없습니다. 소스 설정은 보존하므로 조건 변경은 새 ID로 등록합니다.
