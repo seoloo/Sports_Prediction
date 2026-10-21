@@ -65,3 +65,19 @@ models:
                 values: ["PRE_MATCH", "CLOSING"]
       - name: price_home
         data_tests: [not_null]
+
+  - name: match_features_pit
+    description: 시간순 학습·평가 데이터셋. 경기마다 시작 전에 알 수 있던 결과만으로 만든 팀 특징, 시장 기준선, 결과(과거 재구성 가정)
+    columns:
+      - name: match_id
+        data_tests: [unique, not_null]
+      - name: mode
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["HISTORICAL_RECONSTRUCTION"]
+      - name: result
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["HOME", "DRAW", "AWAY"]
