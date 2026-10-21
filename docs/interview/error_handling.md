@@ -1,6 +1,6 @@
 # 예외 처리와 장애 기록
 
-작성: 2026-10-21(2단계 완료, 3c 시점). 단계가 진행될 때마다 갱신합니다.
+작성: 2026-10-21(3단계 완료 시점). 단계가 진행될 때마다 갱신합니다.
 
 이 문서는 두 부분입니다.
 
@@ -136,10 +136,11 @@
 
 | 종류 | 예 | 막는 것 |
 |---|---|---|
-| 수정·삭제 차단 트리거 | `raw_files`, `fetches`, `team_aliases`, `match_revisions`, `quality_issues`, `odds_revisions`, `live_match_revisions`, `stream_rejections`, `prematch_inputs`, `backtest_runs`, `backtest_predictions`, `evaluation_reports` | 이력 덮어쓰기(평가 기준을 나중에 바꿔 "통과"로 고쳐 쓰는 것 포함) |
+| 수정·삭제 차단 트리거 | `raw_files`, `fetches`, `team_aliases`, `match_revisions`, `quality_issues`, `odds_revisions`, `live_match_revisions`, `stream_rejections`, `prematch_inputs`, `backtest_runs`, `backtest_predictions`, `evaluation_reports`, `prematch_predictions`, `prospective_reports` | 이력 덮어쓰기(평가 기준을 나중에 바꿔 "통과"로 고쳐 쓰는 것 포함) |
 | CHECK | 점수 0 이상, 홈·원정 점수는 둘 다 있거나 둘 다 없음, 전반만 있고 최종이 없는 경우 금지, 배당 > 1, 허용된 시장·선택지·시점·상태만 | 형식이 틀린 값 |
 | CHECK | 스냅샷이 TAKEN이면 입력·기준 시각·해시가 반드시 있음 | 반쯤 저장된 스냅샷 |
 | CHECK | 홈 팀 ≠ 원정 팀 | 잘못된 경기 |
+| 외래 키 + CHECK | 경기 전 예측의 기준 시각 = 스냅샷 기준 시각, 기록 시각은 그 뒤 10분 안, 학습 경기는 기준 시각 이전, 검증되지 않은 모델은 READY 불가 | 나중에 만든 예측·새 모델 소급, 검증 전 확률 표시 |
 | CHECK | 백테스트 예측: 학습에 쓴 마지막 경기 + 3시간 ≤ 학습 기준 시각 ≤ 경기 시작, 확률 셋 모두 양수·합 = 1, PREDICTED면 확률 있음·WITHHELD면 사유 있음 | 누수된 예측, 확률이 아닌 값 |
 | UNIQUE | 같은 리그·시즌·홈·원정 경기는 하나, 같은 원본(해시)은 하나, 경기·시점당 스냅샷 하나, 모델 버전 × 목적 × 평가 시즌 × 데이터셋 해시당 백테스트 실행 하나 | 중복 |
 
@@ -157,6 +158,8 @@
 | 근거 부족 시 보류 | 학습 경기 100개 미만이면 확률 없이 `INSUFFICIENT_TRAINING_DATA(<100)`로 WITHHELD |
 | 시장 비교는 같은 경기끼리 | 시장 배당이 없는 경기는 비교에서 빼서 불공정한 비교를 막음 |
 | 검증 기준(3c) | 결과별 ECE ≤ 0.03이고 시장 마감 전 배당보다 로그 손실 95% 구간 상한 < 0이어야 VALIDATED. 아니면 NOT_VALIDATED와 사유 문장. 통과 전에는 확률을 보여 주지 않음 |
+| 경기 전 예측(3d) | 스냅샷을 찍는 순간에만 만들고, 학습 자료는 실제 수신 시각이 기준 시각 이전인 결과뿐("시작 3시간 뒤" 가정 안 씀). 보류 사유: `MODEL_NOT_VALIDATED`, `LOW_TEAM_HISTORY(<5)`, `INSUFFICIENT_TRAINING_DATA(<100)`, `NO_ACTIVE_MODEL`, `MODEL_CODE_CHANGED`(평가받지 않은 코드), `PREDICTION_FAILED:<오류>` |
+| 예측 실패 격리(3d) | 예측은 저장점 안에서 실행. 실패해도 입력 스냅샷은 남고 실패 사유를 기록. 모델 모듈을 불러올 수 없어도 스냅샷은 계속 |
 | 과신 방지(3c) | 차이의 구간은 주 단위 블록 부트스트랩으로(경기 단위로 뽑으면 구간이 좁아져 과신), 비율 구간은 Wilson(작은 표본에서도 0~1 안) |
 
 ## 7. 기존 로컬 앱(`src/`)의 오류 코드
@@ -192,6 +195,7 @@ CSV는 한 행이라도 틀리면 파일 전체를 저장하지 않습니다(원
 | 13 | 백테스트의 "같은 주" 테스트를 만들 때 토요일과 월요일 경기를 같은 블록으로 가정 | ISO 주는 월요일에 시작해 토요일·월요일은 다른 블록(코드가 맞음) | 테스트를 토요일·일요일로 고침. 월요일 경기는 주말 결과를 반영해 다시 학습한다는 점을 문서화 | 경계(주·자정·시간대)는 직접 계산해 확인한다 |
 | 14 | 해설 문서에 "Dixon-Coles의 rho는 거의 0"이라고 썼다가 틀린 것을 발견 | 한 시점(2025-08)의 학습 결과만 보고 일반화 | 학습 시점 8개를 확인해 rho가 −0.105 ~ +0.09로 흔들린다고 고침 | 숫자 하나로 일반화하지 않고 여러 시점에서 확인한다 |
 | 15 | 평가 보고서를 다시 저장하려 하면 `operator does not exist: bigint[] = smallint[]` | run_id가 작은 숫자라 psycopg가 smallint 배열로 보냄. INSERT는 열 타입으로 변환돼 통과하고 "이미 있으면 찾기" SELECT만 실패 | `%s::bigint[]`로 타입 명시 | 처음 실행이 성공해도 두 번째 실행(멱등 경로)은 따로 테스트해야 한다 |
+| 17 | Airflow 이미지 다시 빌드가 "성공"으로 보였는데 실제로는 시작도 안 됨 | `.env`를 지정하지 않아 docker compose가 변수 오류로 실패했는데, 출력을 `| tail`로 넘겨 종료 코드가 tail의 0으로 가려짐 | `--env-file .env`로 다시 빌드하고, 출력은 파일로 받아 종료 코드를 따로 확인. 컨테이너 안에서 `import numpy`까지 확인한 뒤 코드를 연결 | 파이프로 넘긴 명령의 성공은 마지막 명령의 성공일 뿐이다. 배포는 결과물(이미지 안 라이브러리)로 확인한다 |
 
 ## 면접에서 나올 만한 질문
 

@@ -1,6 +1,6 @@
 # 사용한 기술 스택
 
-작성: 2026-10-21(2단계 완료, 3c 시점). 버전은 저장소에 고정된 값입니다(`requirements*.txt`, `infra/docker-compose.yml`, `infra/*/Dockerfile`).
+작성: 2026-10-21(3단계 완료 시점). 버전은 저장소에 고정된 값입니다(`requirements*.txt`, `infra/docker-compose.yml`, `infra/*/Dockerfile`).
 
 ## 한눈에 보기
 
@@ -108,12 +108,13 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 
 ### Apache Airflow 3.3.2
 
-- **역할:** 매일 배치(마이그레이션 → 시즌 결정 → 시즌별 수집 → co.uk 파일 수집 → dbt build), 30분마다 경기 전 스냅샷.
+- **역할:** 매일 배치(마이그레이션 → 시즌 결정 → 시즌별 수집 → co.uk 파일 수집 → dbt build), 30분마다 경기 전 스냅샷과 모델 예측, 화요일 06:00 UTC 주간 채점 보고서(DAG 3개).
 - **왜:** 데이터 엔지니어링의 표준 오케스트레이터다. 재시도, 실행 기록, 동적 작업(`ingest_season.expand`로 시즌 수만큼 작업 생성)을 제공한다.
 - **구성:** standalone + LocalExecutor. 개인 PC 한 대라 Celery·Kubernetes 실행기는 과하다. Airflow 메타데이터는 같은 Postgres 서버 안의 별도 데이터베이스(`airflow`)에 두어 프로젝트 데이터(`sports`)와 섞이지 않게 했다(`airflow-db-init`이 한 번만 만든다).
 - **경계:** 상시 실행(수집기·소비자)은 Airflow에 넣지 않고 별도 컨테이너로 돌린다. Airflow는 "정해진 시각에 끝나는 작업"용이다.
 - **대안:** Dagster(데이터 자산 중심)도 좋지만, 채용 공고에서 훨씬 많이 쓰이는 Airflow를 택했다.
-- **쓰는 곳:** `dags/openfootball_epl_daily.py`, `dags/prematch_snapshots.py`, `infra/airflow/Dockerfile`. 로컬 주소 127.0.0.1:58080.
+- **쓰는 곳:** `dags/openfootball_epl_daily.py`, `dags/prematch_snapshots.py`, `dags/weekly_model_report.py`, `infra/airflow/Dockerfile`(3d에서 numpy 추가).
+- **배포 순서에서 배운 점:** 코드는 볼륨으로 바로 반영되지만 라이브러리는 이미지에 있다. 스냅샷 DAG가 numpy를 쓰기 전에 이미지를 먼저 다시 빌드하고, 컨테이너 안에서 import를 확인한 뒤 코드를 연결했다. 로컬 주소 127.0.0.1:58080.
 
 ### Docker Compose
 
@@ -126,7 +127,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 - **역할:** 푸시할 때 실제 Postgres·SeaweedFS·Kafka를 띄우고 전체 테스트와 종단 간 실행을 돌린다.
 - **구성:** Postgres는 서비스 컨테이너, SeaweedFS와 Kafka는 `docker run`으로 띄운다(서비스 컨테이너는 실행 명령을 바꿀 수 없는데, 두 서비스는 실행 명령·환경 설정이 필요하다).
 - **`REQUIRE_INTEGRATION=1`:** 로컬에서는 서비스가 없으면 통합 테스트를 건너뛰지만, CI에서는 건너뛰기를 실패로 본다. "건너뛰어서 통과"를 막기 위해서다.
-- **최근 결과:** run 39539987948, 테스트 259개 통과, dbt `PASS=28`(모델 6 + 테스트 22). 3c 이후 전체 테스트는 289개(스트리밍 소비자 수정 포함).
+- **최근 결과:** run 39539987948, 테스트 259개 통과, dbt `PASS=28`(모델 6 + 테스트 22). 3d 이후 전체 테스트는 297개.
 
 ### Streamlit 1.65.0 + SQLite (기존 개인 앱)
 
@@ -144,7 +145,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 |---|---|---|---|
 | Spark | 여러 리그·수십 시즌·이벤트 단위 자료의 특징 계산 | 지금 데이터(경기 2,280, 배당 16만 행)는 Postgres가 몇 초에 처리한다. 작은 데이터에 Spark를 쓰면 설명하기 어렵다 | 리그 확장으로 Postgres 처리 시간이 문제가 될 때, Parquet로 내보낸 Gold에서 시작 |
 | Kubernetes + Helm | 수집기·소비자·Postgres 배포, 재시작·자원 제한 | Docker Compose로 개인 PC 운영은 충분하다 | 모델·API까지 서비스가 늘었을 때 kind·k3d로 로컬 클러스터부터 |
-| FastAPI + 모바일 웹 | 휴대폰에서 이번 주 예측 확인 | 검증된 모델이 아직 없다(3c 평가에서 모든 모델 NOT_VALIDATED). 검증 전 확률은 보여 주지 않는다 | 3d 주간 보고서가 생긴 뒤 |
+| FastAPI + 모바일 웹 | 휴대폰에서 이번 주 예측·주간 보고서 확인 | 3단계까지 끝났고 다음 단계다. 검증 전 확률은 화면에도 WITHHELD로 보여 준다 | 4단계, 외부 접속 방식 결정 필요 |
 
 ## 버전을 고정하는 이유
 
