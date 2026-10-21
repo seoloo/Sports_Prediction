@@ -15,6 +15,7 @@ from airflow.exceptions import AirflowSkipException
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.sdk import dag, task
 
+from pipelines.notify.alerts import airflow_failure_callback
 from pipelines.schedule import seasons_for
 
 LEAGUE = "en.1"
@@ -26,7 +27,8 @@ LEAGUE = "en.1"
     start_date=datetime(2026, 10, 1, tzinfo=timezone.utc),
     catchup=False,  # 꺼져 있던 동안의 실행을 몰아서 하지 않는다. 수집은 최신 원본 기준이라 한 번이면 충분하다.
     max_active_runs=1,  # 같은 데이터셋을 동시에 수집하지 않게 한 번에 하나만 실행
-    default_args={"retries": 2, "retry_delay": timedelta(minutes=5), "retry_exponential_backoff": True},
+    default_args={"retries": 2, "retry_delay": timedelta(minutes=5), "retry_exponential_backoff": True,
+                  "on_failure_callback": airflow_failure_callback},   # 마지막 재시도까지 실패하면 텔레그램 알림
     tags=["ingest", "openfootball", "football-data", "dbt"],
     doc_md=__doc__,
 )

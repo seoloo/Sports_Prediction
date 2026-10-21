@@ -200,6 +200,9 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       BRONZE_BUCKET: ${BRONZE_BUCKET:-bronze}
       LAKE_BUCKET: ${LAKE_BUCKET:-lake}
+      # 텔레그램 알림(선택). 비어 있으면 알림만 건너뛴다.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     ports:
       - "127.0.0.1:${AIRFLOW_PORT:-58080}:8080"
     volumes:

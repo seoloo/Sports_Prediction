@@ -40,6 +40,8 @@
 | [pipelines/lake/spark_features.py](../pipelines/lake/spark_features.py) | Spark로 시간순 특징 재계산(조인 + row_number), 결과 업로드(4a) | `compute_features`, `run` |
 | [pipelines/lake/reconcile.py](../pipelines/lake/reconcile.py) | Spark 결과 ↔ dbt 결과 행·열 대조(pyarrow)(4a) | `reconcile`, `same` |
 | [pipelines/lake/run.py](../pipelines/lake/run.py) | export → spark → reconcile 실행(실패 시 종료 코드 1), Airflow용 별도 가상환경 실행 | `main`, `run_isolated` |
+| [pipelines/notify/telegram.py](../pipelines/notify/telegram.py) | 텔레그램 Bot API 호출(토큰 지움, 4096자 분할, 429 대기), 대화방 ID 확인·시험 명령(4b) | `send`, `call`, `chat_ids` |
+| [pipelines/notify/alerts.py](../pipelines/notify/alerts.py) | 경기 전·주간·실패 알림 문구, 보낸 기록으로 중복 방지, Airflow 실패 콜백(4b) | `notify_prematch`, `notify_weekly`, `airflow_failure_callback` |
 | [pipelines/dbt_runner.py](../pipelines/dbt_runner.py) | `.env` 접속 정보를 넘겨 별도 가상환경의 dbt 실행 | `run_dbt` |
 | [pipelines/schedule.py](../pipelines/schedule.py) | 날짜 → 수집할 시즌 이름(순수 함수) | `seasons_for` |
 | [pipelines/modeling/dataset.py](../pipelines/modeling/dataset.py) | 시간순 데이터셋 읽기, Python 독립 재계산으로 누수 검사(3a) | `load_dataset`, `verify_point_in_time` |

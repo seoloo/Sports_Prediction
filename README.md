@@ -137,6 +137,13 @@ docker compose --env-file .env -f infra/docker-compose.yml --profile spark run -
 - Spark 없이 내보내기·대조만: `.\.venv\Scripts\python.exe -m pipelines.lake.run export` / `... reconcile`
 - 검증 체계 전체(데이터 형식 → 시점 누수 → 구현 동등성 → 모델 성능 → 운영 성능): [검증 체계](docs/interview/validation.md)
 
+### 텔레그램 알림 (로드맵 4b)
+
+경기 전 스냅샷(30분마다, 새 기록이 있을 때만), 주간 채점(화요일), Airflow 작업 실패를 내 텔레그램 대화방으로 보냅니다. 검증 기준을 통과하지 못한 예측은 확률 없이 보류 사유만 보냅니다. `.env`에 `TELEGRAM_BOT_TOKEN`·`TELEGRAM_CHAT_ID`가 없으면 알림만 건너뜁니다. 설정 방법은 [해설](docs/walkthrough/4b_telegram_alerts.md)에 있습니다.
+
+- 대화방 ID 확인(봇에게 먼저 아무 말이나 보낸 뒤): `.\.venv\Scripts\python.exe -m pipelines.notify.telegram chat-id`
+- 시험 메시지: `.\.venv\Scripts\python.exe -m pipelines.notify.telegram test`
+
 ## 처음 사용하는 순서
 
 1. **데이터 소스:** 직접 작성한 자료 또는 로컬 저장 사용권이 확인된 자료의 소스 ID·이름·출처·확인 근거를 등록합니다. 권한 확인 체크가 없는 소스는 PENDING이며 입력에 사용할 수 없습니다. 소스 설정은 보존하므로 조건 변경은 새 ID로 등록합니다.
