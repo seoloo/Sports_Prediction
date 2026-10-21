@@ -21,11 +21,17 @@ AVAILABILITY_LAG = timedelta(hours=3)   # dbt 모델과 같은 과거 재구성 
 FEATURE_COLUMNS = ("l10_n", "l10_gf", "l10_ga", "l10_pts", "l38_n", "l38_gf", "l38_ga")
 
 
-def load_dataset(conn: psycopg.Connection, *, finished_only: bool = True) -> list[dict]:
-    """데이터셋을 시작 시각 순서로 읽는다. finished_only면 결과가 있는 경기만(학습·평가용)."""
+def load_dataset(conn: psycopg.Connection, *, finished_only: bool = True,
+                 competitions: tuple[str, ...] | None = None) -> list[dict]:
+    """데이터셋을 시작 시각 순서로 읽는다. finished_only면 결과가 있는 경기만(학습·평가용).
+
+    competitions를 주면 그 리그만(5a: 모델 학습·평가는 MODELED 리그만, 누수 검사는 전체 리그).
+    """
+    conditions = (["result IS NOT NULL"] if finished_only else []) + (
+        ["competition_code = ANY(%(competitions)s)"] if competitions else [])
     cursor = conn.execute("SELECT * FROM gold.match_features_pit"
-                          + (" WHERE result IS NOT NULL" if finished_only else "")
-                          + " ORDER BY kickoff_utc, match_id")
+                          + (" WHERE " + " AND ".join(conditions) if conditions else "")
+                          + " ORDER BY kickoff_utc, match_id", {"competitions": list(competitions or [])})
     columns = [column.name for column in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
 

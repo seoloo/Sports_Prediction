@@ -1,6 +1,8 @@
-"""매일 EPL 일정·결과를 수집하고 Gold 테이블을 다시 만드는 DAG(로드맵 1d, 4a에서 Spark 대조 추가).
+"""매일 축구 일정·결과를 수집하고 Gold 테이블을 다시 만드는 DAG(로드맵 1d, 4a에서 Spark 대조, 5a에서 다섯 리그).
 
-순서: 스키마 확인 → 수집할 시즌 결정 → 시즌별 수집(동적 태스크) → football-data 배당 CSV 수집 → dbt build
+DAG 이름은 처음 EPL만 다룰 때 붙인 것이라 실행 기록을 잇기 위해 그대로 둔다. 지금은 pipelines/leagues.py의
+다섯 리그(EPL, 분데스리가, 라리가, 세리에A, 에레디비시)를 모두 수집한다.
+순서: 스키마 확인 → 수집할 (리그, 시즌) 결정 → 리그·시즌별 수집(동적 태스크) → football-data 배당 CSV 수집 → dbt build
      → Gold를 Parquet로 내보내고 Spark로 특징을 다시 계산해 dbt 결과와 대조(4a)
 - football-data.co.uk CSV는 사용자가 직접 내려받아 data/landing/football-data-co-uk/에 넣은 파일만 읽는다(자동 다운로드 금지).
 - 수집은 멱등이라 같은 날 여러 번 실행해도 원본·경기 버전이 늘지 않는다. Gold는 매번 테이블을 다시 만든다.
@@ -15,10 +17,9 @@ from airflow.exceptions import AirflowSkipException
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.sdk import dag, task
 
+from pipelines.leagues import LEAGUES
 from pipelines.notify.alerts import airflow_failure_callback
 from pipelines.schedule import seasons_for
-
-LEAGUE = "en.1"
 
 
 @dag(
@@ -29,7 +30,7 @@ LEAGUE = "en.1"
     max_active_runs=1,  # 같은 데이터셋을 동시에 수집하지 않게 한 번에 하나만 실행
     default_args={"retries": 2, "retry_delay": timedelta(minutes=5), "retry_exponential_backoff": True,
                   "on_failure_callback": airflow_failure_callback},   # 마지막 재시도까지 실패하면 텔레그램 알림
-    tags=["ingest", "openfootball", "football-data", "dbt"],
+    tags=["ingest", "openfootball", "football-data", "dbt", "multi-league"],
     doc_md=__doc__,
 )
 def openfootball_epl_daily():
@@ -42,18 +43,19 @@ def openfootball_epl_daily():
 
     @task
     def seasons_to_ingest():
-        """이번 실행에서 수집할 시즌 목록(이전·현재 시즌)."""
-        return seasons_for(datetime.now(timezone.utc).date())
+        """이번 실행에서 수집할 (리그, 시즌) 목록: 리그마다 이전·현재 시즌."""
+        seasons = seasons_for(datetime.now(timezone.utc).date())
+        return [{"league": league.code, "season": season} for league in LEAGUES for season in seasons]
 
-    @task
-    def ingest_season(season: str):
-        """시즌 하나를 수집하고 실행 통계를 돌려준다(XCom으로 Airflow 화면에서 확인 가능)."""
+    @task(max_active_tis_per_dag=2)   # openfootball(GitHub) 요청을 한꺼번에 몰지 않는다
+    def ingest_season(target: dict):
+        """리그·시즌 하나를 수집하고 실행 통계를 돌려준다(XCom으로 Airflow 화면에서 확인 가능)."""
         from pipelines.ingest import openfootball
         try:
-            return openfootball.ingest(season, LEAGUE)
+            return openfootball.ingest(target["season"], target["league"])
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
-                raise AirflowSkipException(f"{season} 시즌 파일이 아직 없습니다.")
+                raise AirflowSkipException(f"{target['league']} {target['season']} 시즌 파일이 아직 없습니다.")
             raise
 
     @task(trigger_rule="none_failed")
@@ -80,7 +82,7 @@ def openfootball_epl_daily():
                 "spark_newly_computed": report["spark"]["newly_computed"], "reconcile": report["reconcile"]}
 
     # 배당은 openfootball 경기에 연결하므로 경기 수집이 끝난 뒤에 넣는다.
-    migrate_schema() >> ingest_season.expand(season=seasons_to_ingest()) >> ingest_football_data_files() >> dbt_build
+    migrate_schema() >> ingest_season.expand(target=seasons_to_ingest()) >> ingest_football_data_files() >> dbt_build
     dbt_build >> spark_reconcile()
 
 

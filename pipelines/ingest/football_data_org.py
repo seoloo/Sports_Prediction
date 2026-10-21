@@ -38,7 +38,10 @@ TOPIC = "fdorg.matches.v1"
 ATTRIBUTION = "Football data provided by the Football-Data.org API"
 
 # football-data.org 대회 코드 → openfootball 리그 코드
-COMPETITION_TO_LEAGUE = {"PL": "en.1"}
+# 대회 코드 → openfootball 리그 코드(5a: 다섯 리그, pipelines/leagues.py)
+from ..leagues import LEAGUES  # noqa: E402
+
+COMPETITION_TO_LEAGUE = {league.fdorg: league.code for league in LEAGUES}
 
 # 경기 중이거나 곧 시작·방금 끝난 경기가 있으면 자주, 아니면 드물게 조회한다(분당 10회 한도 안에서 충분히 여유 있음).
 LIVE_INTERVAL = timedelta(minutes=2)
@@ -247,34 +250,44 @@ def suggest_aliases(conn, matches: list[dict], *, league: str, season: str) -> l
     return suggestions
 
 
-def run_forever(competition: str = "PL") -> None:
-    """계속 실행하면서 경기 상황에 맞춘 간격으로 조회한다. 오류가 나면 기록하고 5분 뒤 다시 시도한다."""
+def run_forever(competitions: tuple[str, ...] | None = None) -> None:
+    """계속 실행하면서 경기 상황에 맞춘 간격으로 조회한다. 오류가 나면 기록하고 5분 뒤 다시 시도한다.
+
+    5a: 여러 대회를 한 반복에서 차례로 조회하고(분당 10회 한도는 RateLimiter 하나가 함께 지킨다),
+    대회별 다음 조회 시각을 따로 둔다. 경기 중인 리그만 2분마다, 나머지는 각자의 간격대로.
+    """
+    competitions = competitions or tuple(COMPETITION_TO_LEAGUE)
     limiter = RateLimiter()
     settings = load_settings()
     kafka_io.ensure_topics(settings)
     kafka_producer = kafka_io.producer(settings, client_id="fdorg-poller")
+    due = {competition: 0.0 for competition in competitions}   # 대회 → 다음 조회 시각(time.monotonic 기준)
     while True:
-        try:
-            stats = poll_once(competition, settings=settings, limiter=limiter, kafka_producer=kafka_producer)
-            wait_seconds = stats["next_poll_seconds"]
-            print(json.dumps(stats, ensure_ascii=False), flush=True)
-        except Exception as exc:  # 네트워크·API 오류로 수집기가 멈추지 않게 한다(실패는 ingest.runs에 남는다).
-            print(f"poll failed: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
-            wait_seconds = 300
-        time.sleep(wait_seconds)
+        for competition in competitions:
+            if time.monotonic() < due[competition]:
+                continue
+            try:
+                stats = poll_once(competition, settings=settings, limiter=limiter, kafka_producer=kafka_producer)
+                due[competition] = time.monotonic() + stats["next_poll_seconds"]
+                print(json.dumps(stats, ensure_ascii=False), flush=True)
+            except Exception as exc:  # 네트워크·API 오류로 수집기가 멈추지 않게 한다(실패는 ingest.runs에 남는다).
+                print(f"poll failed ({competition}): {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+                due[competition] = time.monotonic() + 300
+        time.sleep(max(1.0, min(due.values()) - time.monotonic()))
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=f"football-data.org 경기 수집기. {ATTRIBUTION}")
-    parser.add_argument("--competition", default="PL", choices=sorted(COMPETITION_TO_LEAGUE))
+    parser.add_argument("--competition", choices=sorted(COMPETITION_TO_LEAGUE),
+                        help="대회 하나만(기본: 다섯 리그 모두, --once에서는 PL)")
     parser.add_argument("--season", help="예: 2026-27. 기본은 현재 시즌")
     parser.add_argument("--once", action="store_true", help="한 번만 조회")
     args = parser.parse_args(argv)
     if args.once:
         kafka_io.ensure_topics()
-        print(json.dumps(poll_once(args.competition, args.season), ensure_ascii=False, indent=2))
+        print(json.dumps(poll_once(args.competition or "PL", args.season), ensure_ascii=False, indent=2))
     else:
-        run_forever(args.competition)
+        run_forever((args.competition,) if args.competition else None)
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ RAW_URL_TEMPLATE = "https://raw.githubusercontent.com/openfootball/football.json
 
 # 리그 코드 → 경기 시각을 해석할 현지 시간대. openfootball의 time에는 시간대 표기가 없어서 가정이 필요하다.
 LEAGUE_TIMEZONES = {"en.1": "Europe/London", "es.1": "Europe/Madrid", "de.1": "Europe/Berlin",
-                    "it.1": "Europe/Rome", "fr.1": "Europe/Paris"}
+                    "it.1": "Europe/Rome", "fr.1": "Europe/Paris", "nl.1": "Europe/Amsterdam"}
 
 # 수집 실행끼리 같은 데이터셋을 동시에 쓰지 않도록 잡는 Postgres advisory lock의 앞 번호
 INGEST_LOCK_NAMESPACE = 7_302_201

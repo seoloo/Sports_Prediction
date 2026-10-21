@@ -24,7 +24,7 @@ PREMATCH_STALE_AFTER = timedelta(hours=24)   # 시작한 지 하루가 지난 �
 OFFSET_LABEL = {"T-24H": "24시간 전", "T-3H": "3시간 전", "T-1H": "1시간 전"}
 REASON_LABEL = {"MODEL_NOT_VALIDATED": "모델 미검증", "LOW_TEAM_HISTORY(<5)": "팀 기록 부족",
                 "INSUFFICIENT_TRAINING_DATA(<100)": "학습 자료 부족", "NO_ACTIVE_MODEL": "활성 모델 없음",
-                "MODEL_CODE_CHANGED": "평가받지 않은 모델 코드"}
+                "MODEL_CODE_CHANGED": "평가받지 않은 모델 코드", "LEAGUE_NOT_MODELED": "이 리그 모델 없음"}
 WEEKDAYS = "월화수목금토일"
 log = logging.getLogger(__name__)
 

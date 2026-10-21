@@ -38,6 +38,8 @@ def test_dataset_values_and_independent_check(dbt_settings):
     build(s, "--select", "+match_features_pit")
     with psycopg.connect(s.postgres_conninfo) as conn:
         rows = {(r["home_team"], r["away_team"]): r for r in load_dataset(conn, finished_only=False)}
+        assert load_dataset(conn, finished_only=False, competitions=("de.1",)) == []   # 리그 거르기(5a)
+        assert len(load_dataset(conn, finished_only=False, competitions=("en.1",))) == len(rows)
         check = verify_point_in_time(conn)
         seasons = coverage(conn)
     # Delta FC - Alpha FC(예정): Delta의 이전 경기 Gamma 0-0 Delta, Alpha의 이전 경기 Alpha 2-1 Beta

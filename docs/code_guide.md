@@ -22,6 +22,7 @@
 | 파일 | 역할 | 대표 함수 |
 |---|---|---|
 | [infra/docker-compose.yml](../infra/docker-compose.yml) | PostgreSQL·SeaweedFS(S3) 컨테이너, 127.0.0.1 포트 | — |
+| [pipelines/leagues.py](../pipelines/leagues.py) | 다섯 리그의 소스별 이름(openfootball·football-data.org·The Odds API·co.uk)과 모델이 있는 리그(5a) | `LEAGUES`, `MODELED` |
 | [pipelines/config.py](../pipelines/config.py) | `.env` 읽기, 무작위 비밀번호로 `.env` 만들기 | `load_settings`, `init_env` |
 | [pipelines/db.py](../pipelines/db.py) | Postgres 연결, `sql/NNN_*.sql` 순서 적용 | `connect`, `migrate` |
 | [pipelines/sql/001_ingest_silver.sql](../pipelines/sql/001_ingest_silver.sql) | `ingest`·`silver` 스키마, 불변 트리거, 기준 시각 함수 | `silver.match_revisions_known_at` |

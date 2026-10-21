@@ -23,6 +23,7 @@ from ..config import load_settings
 from ..db import connect, migrate
 from ..snapshots import KNOWN_FIXTURES_SQL
 from .backtest import OUTCOMES, brier, log_loss
+from ..leagues import MODELED
 from .models import TrainingMatch, model_from_params, promoted_by_season
 MIN_TRAINING_MATCHES = 100
 MIN_TEAM_HISTORY = 5          # 한 팀의 학습 경기가 이보다 적으면(승격 팀 시즌 초 등) 사유를 하나 더 붙인다
@@ -74,7 +75,8 @@ class Predictor:
         self.as_of = as_of
         self.active = active_model(conn)
         self.model, self.reasons = None, []
-        fixtures = known_fixtures(conn, as_of)
+        # 5a: 모델은 학습·평가한 리그(MODELED)의 경기로만 학습한다. 다른 리그는 예측하지 않는다(LEAGUE_NOT_MODELED).
+        fixtures = [row for row in known_fixtures(conn, as_of) if row["competition_code"] in MODELED]
         # 시즌별 승격 팀(3e). 시즌 참가 팀은 일정이 나올 때 이미 알려진다.
         self.promoted = promoted_by_season((row["season"], row["home"], row["away"]) for row in fixtures)
         finished = sorted((row for row in fixtures
@@ -113,15 +115,21 @@ class Predictor:
         last = self.last_played.get(team)
         return None if last is None or kickoff is None else (kickoff - last).total_seconds() / 86400
 
-    def predict(self, home: str, away: str, season: str | None = None, kickoff: datetime | None = None) -> dict:
+    def predict(self, home: str, away: str, season: str | None = None, kickoff: datetime | None = None,
+                competition: str | None = None) -> dict:
         """저장할 예측 한 행. 확률은 모델이 있을 때만, 표시 상태는 검증 기준과 자료 부족 여부로 정한다."""
-        reasons = list(self.reasons)
-        probabilities = (self.model.predict(home, away, self.is_promoted(home, season), self.is_promoted(away, season),
-                                            self.rest_days(home, kickoff), self.rest_days(away, kickoff))
-                         if self.model else None)
-        if self.active and self.active["gate_status"] != "VALIDATED":
+        if competition is not None and competition not in MODELED:
+            reasons = ["LEAGUE_NOT_MODELED"]   # 이 리그로 학습·평가한 모델이 없다. 다른 리그 모델로 대신 예측하지 않는다
+            probabilities = None
+        else:
+            reasons = list(self.reasons)
+            probabilities = (self.model.predict(home, away, self.is_promoted(home, season), self.is_promoted(away, season),
+                                                self.rest_days(home, kickoff), self.rest_days(away, kickoff))
+                             if self.model else None)
+        modeled = reasons != ["LEAGUE_NOT_MODELED"]   # 리그 모델이 없으면 다른 사유는 의미가 없다
+        if modeled and self.active and self.active["gate_status"] != "VALIDATED":
             reasons.append("MODEL_NOT_VALIDATED")
-        if min(self.history[home], self.history[away]) < MIN_TEAM_HISTORY:
+        if modeled and min(self.history[home], self.history[away]) < MIN_TEAM_HISTORY:
             reasons.append(f"LOW_TEAM_HISTORY(<{MIN_TEAM_HISTORY})")
         active = self.active or {}
         return {"model_name": active.get("name", "unavailable"), "model_version": active.get("model_version", "unavailable"),
@@ -148,13 +156,14 @@ def insert_prediction(conn: psycopg.Connection, match_id: int, offset_label: str
 
 
 def record_for_snapshot(conn: psycopg.Connection, match_id: int, offset_label: str, home: str, away: str,
-                        as_of: datetime, cache: dict, season: str | None = None, kickoff: datetime | None = None) -> str:
+                        as_of: datetime, cache: dict, season: str | None = None, kickoff: datetime | None = None,
+                        competition: str | None = None) -> str:
     """방금 찍은 스냅샷에 모델 예측을 붙인다. 예측이 실패해도 스냅샷은 지키고 실패 사유를 WITHHELD로 남긴다."""
     try:
         with conn.transaction():   # 저장점: 실패하면 이 예측만 취소
             if as_of not in cache:
                 cache[as_of] = Predictor(conn, as_of)
-            row = cache[as_of].predict(home, away, season, kickoff)
+            row = cache[as_of].predict(home, away, season, kickoff, competition)
             insert_prediction(conn, match_id, offset_label, as_of, row)
             return row["display_status"]
     except Exception as exc:   # noqa: BLE001 (예측 실패가 입력 스냅샷까지 잃게 하지 않는다)

@@ -28,6 +28,7 @@ from psycopg.types.json import Jsonb
 
 from ..config import load_settings
 from ..db import connect, migrate
+from ..leagues import MODELED
 from .dataset import AVAILABILITY_LAG, attach_stats, load_dataset, load_match_stats
 from .models import (BaseRateModel, DixonColesModel, MarketBlendModel, PoissonModel, TrainingMatch, blend,
                      model_from_params, promoted_by_season, sharpen)
@@ -349,7 +350,7 @@ def main(argv=None) -> None:
     args = parser.parse_args(argv)
     with connect(load_settings()) as conn:
         migrate(conn)
-        rows = attach_stats(load_dataset(conn, finished_only=False), load_match_stats(conn))
+        rows = attach_stats(load_dataset(conn, finished_only=False, competitions=MODELED), load_match_stats(conn))
         report = run(rows, None if args.no_store else conn)
     print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
 
