@@ -10,6 +10,8 @@
 5. Silver: 배당을 한 줄 형태로 COPY한 뒤 한 번의 SQL로 "값이 바뀐 것만" 다음 버전으로 추가한다.
    끝난 경기의 기록(슈팅·유효 슈팅·퇴장, 3g)도 같은 방식으로 silver.match_stats_revisions에 넣는다.
 
+다가올 경기의 배당(3h): football-data.co.uk의 fixtures.csv(예정 경기와 배당, 여러 리그가 한 파일)도 같은 방식으로
+
 실행
   python -m pipelines.ingest.football_data_co_uk                       # 기본 landing 폴더의 모든 파일
   python -m pipelines.ingest.football_data_co_uk --dir 다른폴더
@@ -35,6 +37,7 @@ from ..aliases import ALIAS_FILE, load_alias_file, sync_aliases
 from ..config import PROJECT_ROOT, load_settings
 from ..db import connect, migrate
 from ..object_store import client, ensure_bucket, put_if_absent
+from ..schedule import season_label
 
 SOURCE_ID = "football-data-co-uk"
 LANDING_DIR = PROJECT_ROOT / "data" / "landing" / "football-data-co-uk"
@@ -42,6 +45,9 @@ LANDING_DIR = PROJECT_ROOT / "data" / "landing" / "football-data-co-uk"
 # 리그 코드(football-data) → openfootball 리그 코드
 DIVISION_TO_COMPETITION = {"E0": "en.1"}
 FILENAME_PATTERN = re.compile(r"^(?P<division>E0)_(?P<start>\d{4})[-_](?P<end>\d{2})\.csv$")
+# 예정 경기 파일(3h). 내려받을 때 이름이 fixtures.csv라, 날짜를 붙여 저장해도 되게 fixtures_20261023.csv 등도 받는다.
+FIXTURES_PATTERN = re.compile(r"^fixtures(?:[-_][\w-]+)?\.csv$", re.IGNORECASE)
+FIXTURES_DIVISION = "E0"
 
 # 1X2 배당을 찾을 북메이커 코드(football-data Notes 기준). 열 이름은 코드+H/D/A, 마감은 코드+C+H/D/A.
 BOOKMAKERS_1X2 = ("B365", "BW", "IW", "PS", "WH", "VC", "BF", "1XB", "BFE", "BFD", "BMGM", "BV", "CL", "LB",
@@ -107,6 +113,11 @@ def season_from_filename(name: str) -> tuple[str, str]:
     if f"{(start + 1) % 100:02d}" != end:
         raise ValueError(f"시즌 연도가 이어지지 않습니다: {name}")
     return match["division"], f"{start}-{end}"
+
+
+def season_of(match_date: date) -> str:
+    """경기 날짜 → 시즌 이름. 유럽 리그는 7월에 새 시즌이 시작한다고 본다(schedule.seasons_for와 같은 규칙)."""
+    return season_label(match_date.year if match_date.month >= 7 else match_date.year - 1)
 
 
 def parse_price(text: str):
@@ -210,8 +221,11 @@ def _parse_goals(text: str):
     return int(text)
 
 
-def parse_csv(payload: bytes, *, division: str) -> tuple[list[FixtureRow], list[QualityIssue]]:
-    """CSV 바이트를 경기 행 목록과 품질 문제 목록으로 바꾼다. DB·네트워크를 쓰지 않는 순수 함수다."""
+def parse_csv(payload: bytes, *, division: str, skip_other_divisions: bool = False) -> tuple[list[FixtureRow], list[QualityIssue]]:
+    """CSV 바이트를 경기 행 목록과 품질 문제 목록으로 바꾼다. DB·네트워크를 쓰지 않는 순수 함수다.
+
+    skip_other_divisions: 여러 리그가 한 파일에 있는 fixtures.csv에서는 다른 리그 행을 문제 없이 건너뛴다.
+    """
     text = payload.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text, newline=""))
     headers = set(reader.fieldnames or [])
@@ -227,7 +241,8 @@ def parse_csv(payload: bytes, *, division: str) -> tuple[list[FixtureRow], list[
         if not any((value or "").strip() for value in row.values()):
             continue  # 파일 끝의 빈 줄
         if row.get("Div") != division:
-            reject("UNEXPECTED_DIVISION")
+            if not skip_other_divisions:
+                reject("UNEXPECTED_DIVISION")
             continue
         home, away = (row.get("HomeTeam") or "").strip(), (row.get("AwayTeam") or "").strip()
         if not home or not away or home == away:
@@ -350,7 +365,8 @@ def write_stats(conn: psycopg.Connection, linked, *, raw_file_id: int, received_
 
 def ingest_file(path: Path, *, settings=None, received_at: datetime | None = None, alias_file: Path = ALIAS_FILE) -> dict:
     """CSV 파일 하나를 Bronze·Silver에 수집하고 실행 통계를 돌려준다. 같은 파일을 다시 넣어도 배당 버전은 늘지 않는다."""
-    division, season = season_from_filename(path.name)
+    upcoming = bool(FIXTURES_PATTERN.match(path.name))
+    division, season = (FIXTURES_DIVISION, "fixtures") if upcoming else season_from_filename(path.name)
     competition = DIVISION_TO_COMPETITION[division]
     settings = settings or load_settings()
     dataset = f"{division}/{season}"
@@ -370,7 +386,7 @@ def ingest_file(path: Path, *, settings=None, received_at: datetime | None = Non
             bronze_uploaded = put_if_absent(store, settings.bronze_bucket, object_key, payload,
                                             {"source-file": path.name, "received-at": received_at.isoformat()},
                                             content_type="text/csv")
-            fixtures, parse_issues = parse_csv(payload, division=division)
+            fixtures, parse_issues = parse_csv(payload, division=division, skip_other_divisions=upcoming)
             with conn.transaction():
                 conn.execute("SELECT pg_advisory_xact_lock(%s, hashtext(%s))", (INGEST_LOCK_NAMESPACE, dataset))
                 sync_aliases(conn, load_alias_file(alias_file), received_at)
@@ -386,7 +402,14 @@ def ingest_file(path: Path, *, settings=None, received_at: datetime | None = Non
                     (SOURCE_ID, dataset, sha256)).fetchone()[0]
                 conn.execute("INSERT INTO ingest.fetches (run_id, raw_file_id, received_at, is_new_content) VALUES (%s, %s, %s, %s)",
                              (run_id, raw_file_id, received_at, is_new_content))
-                linked, link_issues = link_fixtures(conn, fixtures, competition=competition, season=season)
+                if upcoming:   # 예정 경기 파일은 시즌이 섞일 수 있어 경기 날짜로 나눠 연결한다
+                    linked, link_issues = [], []
+                    for group_season in sorted({season_of(fixture.local_date) for fixture in fixtures}):
+                        group = [fixture for fixture in fixtures if season_of(fixture.local_date) == group_season]
+                        group_linked, group_issues = link_fixtures(conn, group, competition=competition, season=group_season)
+                        linked, link_issues = linked + group_linked, link_issues + group_issues
+                else:
+                    linked, link_issues = link_fixtures(conn, fixtures, competition=competition, season=season)
                 odds_new = write_odds(conn, linked, raw_file_id=raw_file_id, received_at=received_at)
                 stats_new = write_stats(conn, linked, raw_file_id=raw_file_id, received_at=received_at)
                 issues = parse_issues + link_issues
@@ -413,11 +436,12 @@ def ingest_file(path: Path, *, settings=None, received_at: datetime | None = Non
 
 
 def landing_files(directory: Path = LANDING_DIR) -> list[Path]:
-    """landing 폴더에서 이름 규칙에 맞는 CSV를 시즌 순서로 돌려준다. 폴더가 없으면 빈 목록."""
+    """landing 폴더에서 이름 규칙에 맞는 CSV를 시즌 순서로, 그 뒤에 예정 경기 파일을 돌려준다. 폴더가 없으면 빈 목록."""
     if not directory.exists():
         return []
-    return sorted((path for path in directory.iterdir() if FILENAME_PATTERN.match(path.name)),
-                  key=lambda path: season_from_filename(path.name))
+    seasons = sorted((path for path in directory.iterdir() if FILENAME_PATTERN.match(path.name)),
+                     key=lambda path: season_from_filename(path.name))
+    return seasons + sorted(path for path in directory.iterdir() if FIXTURES_PATTERN.match(path.name))
 
 
 def suggest_aliases(conn: psycopg.Connection, paths: list[Path]) -> list[dict]:

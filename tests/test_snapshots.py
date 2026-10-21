@@ -40,7 +40,7 @@ def test_snapshots_are_taken_once_missed_ones_are_not_backfilled(season):
     s = season
     first = KICKOFF - timedelta(hours=2, minutes=30)
     assert snapshots.run(now=first, settings=s) == {"TAKEN": 1, "MISSED": 1, "upcoming_matches": 1,
-                                                    "recently_started_matches": 0, "PREDICTION_WITHHELD": 1}
+                                                    "recently_started_matches": 0, "PREDICTION_WITHHELD": 1,
     assert rows(s) == [("T-24H", "MISSED", False), ("T-3H", "TAKEN", True)]
     # 찍은 스냅샷에만 같은 as_of의 예측이 붙는다. 이 DB에는 백테스트가 없어 활성 모델이 없으므로 확률 없이 보류.
     assert query(s, """SELECT offset_label, as_of = %s, prob_home, display_status, withheld_reasons

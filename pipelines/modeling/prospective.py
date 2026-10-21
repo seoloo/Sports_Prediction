@@ -241,7 +241,7 @@ def weekly_summary(conn: psycopg.Connection, week_start: date, as_of: datetime) 
             "snapshots": {label: dict(counts) for label, counts in sorted(by_offset.items())},
             "withheld_reasons": dict(reasons),
             "week": {label: metrics([i for i in this_week if i["offset_label"] == label]) for label in ("T-24H", "T-3H", "T-1H")},
-            "cumulative": {label: metrics([i for i in scored if i["offset_label"] == label]) for label in ("T-24H", "T-3H", "T-1H")}}
+            "cumulative": {label: metrics([i for i in scored if i["offset_label"] == label]) for label in ("T-24H", "T-3H", "T-1H")},
 
 
 def store_weekly(conn: psycopg.Connection, summary: dict) -> tuple[int, bool]:

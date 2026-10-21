@@ -137,6 +137,10 @@ docker compose --env-file .env -f infra/docker-compose.yml --profile spark run -
 - Spark 없이 내보내기·대조만: `.\.venv\Scripts\python.exe -m pipelines.lake.run export` / `... reconcile`
 - 검증 체계 전체(데이터 형식 → 시점 누수 → 구현 동등성 → 모델 성능 → 운영 성능): [검증 체계](docs/interview/validation.md)
 
+
+
+- 다가올 경기의 해외 배당: football-data.co.uk `fixtures.csv`를 직접 내려받아 `data/landing/football-data-co-uk/`에 넣기(자동 다운로드 안 함)
+
 ### 텔레그램 알림 (로드맵 4b)
 
 경기 전 스냅샷(30분마다, 새 기록이 있을 때만), 주간 채점(화요일), Airflow 작업 실패를 내 텔레그램 대화방으로 보냅니다. 검증 기준을 통과하지 못한 예측은 확률 없이 보류 사유만 보냅니다. `.env`에 `TELEGRAM_BOT_TOKEN`·`TELEGRAM_CHAT_ID`가 없으면 알림만 건너뜁니다. 설정 방법은 [해설](docs/walkthrough/4b_telegram_alerts.md)에 있습니다.
