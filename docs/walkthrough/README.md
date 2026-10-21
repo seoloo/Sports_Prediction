@@ -5,5 +5,6 @@
 | 단계 | 문서 | 내용 |
 |---|---|---|
 | 2a | [Kafka 기반](2a_kafka.md) | Kafka 브로커, 토픽, 이벤트 겉봉투, 생산자·소비자 설정 |
+| 2b | [football-data.org 수집기](2b_football_data_org.md) | 요청 한도·429 처리, 경기 상황에 맞춘 조회 간격, Bronze 보존, 바뀐 경우에만 발행 |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md)을 함께 보세요.
