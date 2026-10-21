@@ -45,6 +45,7 @@ class Settings:
     lake_bucket: str = "lake"   # 가공한 Parquet(Gold 내보내기·Spark 결과). 받은 원본만 두는 Bronze와 분리한다(4a)
     telegram_bot_token: str | None = None   # 없으면 알림을 보내지 않는다(NOT_CONFIGURED). 로그·오류에 찍지 않는다
     telegram_chat_id: str | None = None     # 알림을 받을 내 대화방 ID
+    the_odds_api_key: str | None = None     # 다가올 경기의 해외 배당(5b). 없으면 배당 수집만 건너뛴다
 
     @property
     def postgres_conninfo(self) -> str:
@@ -56,7 +57,7 @@ class Settings:
 def load_settings(env_path: Path = ENV_PATH) -> Settings:
     """.env와 환경 변수를 합쳐 Settings를 만든다. 필수 비밀번호가 없으면 안내와 함께 오류를 낸다."""
     values = {**read_env_file(env_path), **{key: value for key, value in os.environ.items()
-                                            if key.startswith(("POSTGRES_", "S3_", "BRONZE_", "LAKE_", "KAFKA_", "FOOTBALL_DATA_ORG_", "TELEGRAM_"))}}
+                                            if key.startswith(("POSTGRES_", "S3_", "BRONZE_", "LAKE_", "KAFKA_", "FOOTBALL_DATA_ORG_", "TELEGRAM_", "THE_ODDS_"))}}
     missing = [key for key in ("POSTGRES_USER", "POSTGRES_PASSWORD", "S3_ACCESS_KEY", "S3_SECRET_KEY")
                if not values.get(key)]
     if missing:
@@ -79,6 +80,7 @@ def load_settings(env_path: Path = ENV_PATH) -> Settings:
         lake_bucket=values.get("LAKE_BUCKET", "lake"),
         telegram_bot_token=(values.get("TELEGRAM_BOT_TOKEN") or "").strip() or None,
         telegram_chat_id=(values.get("TELEGRAM_CHAT_ID") or "").strip() or None,
+        the_odds_api_key=(values.get("THE_ODDS_API_KEY") or "").strip() or None,
     )
 
 

@@ -30,6 +30,7 @@
 | [pipelines/ingest/openfootball.py](../pipelines/ingest/openfootball.py) | openfootball 수집: 정규화(순수 함수) → Bronze → Silver | `normalize_document`, `write_silver`, `ingest` |
 | [pipelines/ingest/football_data_co_uk.py](../pipelines/ingest/football_data_co_uk.py) | 직접 내려받은 배당 CSV: 열 이름 기반 파싱 → 대조표로 경기 연결 → COPY + 집합 연산으로 바뀐 배당·경기 기록(3g)만 버전 추가 | `parse_csv`, `extract_stats`, `link_fixtures`, `write_odds`, `write_stats` |
 | [pipelines/mappings/team_aliases.csv](../pipelines/mappings/team_aliases.csv) | 검토한 팀 이름 대조표(같은 날짜 경기 근거) | — |
+| [pipelines/ingest/the_odds_api.py](../pipelines/ingest/the_odds_api.py) | The Odds API 수집: 스냅샷 직전에만 리그별 배당(크레딧 예산), Bronze 원본, 값이 바뀐 배당만 버전, 팀 대조표 후보(5b) | `run_due`, `due_offsets`, `quotes`, `write_odds`, `suggest_aliases` |
 | [pipelines/aliases.py](../pipelines/aliases.py) | 검토한 팀 대조표 읽기·반영(소스 공통) | `load_alias_file`, `sync_aliases` |
 | [pipelines/ingest/football_data_org.py](../pipelines/ingest/football_data_org.py) | API 수집기: 요청 한도·429 처리, Bronze 보존, 바뀐 경우에만 이벤트 발행, 조회 간격 자동 조절 | `RateLimiter`, `fetch_json`, `poll_once`, `next_poll_interval` |
 | [pipelines/streaming/events.py](../pipelines/streaming/events.py) | 이벤트 겉봉투(내용 해시 event_id, published_at·observed_at) | `build_event`, `decode` |

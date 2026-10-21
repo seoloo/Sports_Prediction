@@ -203,6 +203,7 @@ services:
       # 텔레그램 알림(선택). 비어 있으면 알림만 건너뛴다.
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      THE_ODDS_API_KEY: ${THE_ODDS_API_KEY:-}
     ports:
       - "127.0.0.1:${AIRFLOW_PORT:-58080}:8080"
     volumes:

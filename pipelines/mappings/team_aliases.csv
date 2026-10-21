@@ -127,3 +127,100 @@ football-data-org,586,Torino FC,Torino FC; same-date(+-1d) fixtures 38/38 (SA)
 football-data-org,5890,US Lecce,US Lecce; same-date(+-1d) fixtures 37/38 (SA)
 football-data-org,5911,AC Monza,AC Monza; same-date(+-1d) fixtures 38/38 (SA)
 football-data-org,7397,Como 1907,Como 1907; same-date(+-1d) fixtures 38/38 (SA)
+# 5b(2026-10-21): The Odds API 팀 이름. 같은 리그에서 시작 시각이 정확히 같은 경기 중 이름이 가장 비슷한 경기. 유사도 0.75 미만 16개는 사람이 확인(약칭·정식 명칭 차이)
+the-odds-api,1. FC Köln,1. FC Köln,same kickoff 2026-10-24T13:30Z (de.1); name similarity 1.00
+the-odds-api,Augsburg,FC Augsburg,same kickoff 2026-10-24T13:30Z (de.1); name similarity 1.00
+the-odds-api,Bayer Leverkusen,Bayer 04 Leverkusen,same kickoff 2026-10-25T14:30Z (de.1); name similarity 1.00
+the-odds-api,Bayern Munich,FC Bayern München,same kickoff 2026-10-25T16:30Z (de.1); name similarity 0.89
+the-odds-api,Borussia Dortmund,Borussia Dortmund,same kickoff 2026-10-24T16:30Z (de.1); name similarity 1.00
+the-odds-api,Borussia Monchengladbach,Borussia Mönchengladbach,same kickoff 2026-10-23T18:30Z (de.1); name similarity 1.00
+the-odds-api,Eintracht Frankfurt,Eintracht Frankfurt,same kickoff 2026-10-24T16:30Z (de.1); name similarity 1.00
+the-odds-api,Elversberg,SV 07 Elversberg,same kickoff 2026-10-24T13:30Z (de.1); name similarity 0.77
+the-odds-api,FC Schalke 04,FC Schalke 04,same kickoff 2026-10-24T13:30Z (de.1); name similarity 1.00
+the-odds-api,FSV Mainz 05,1. FSV Mainz 05,same kickoff 2026-10-24T13:30Z (de.1); name similarity 1.00
+the-odds-api,Hamburger SV,Hamburger SV,same kickoff 2026-10-24T13:30Z (de.1); name similarity 1.00
+the-odds-api,RB Leipzig,RB Leipzig,same kickoff 2026-10-24T13:30Z (de.1); name similarity 1.00
+the-odds-api,SC Freiburg,SC Freiburg,same kickoff 2026-10-25T16:30Z (de.1); name similarity 1.00
+the-odds-api,SC Paderborn,SC Paderborn 07,same kickoff 2026-10-24T13:30Z (de.1); name similarity 0.86
+the-odds-api,TSG Hoffenheim,TSG 1899 Hoffenheim,same kickoff 2026-10-25T14:30Z (de.1); name similarity 1.00
+the-odds-api,Union Berlin,1. FC Union Berlin,same kickoff 2026-10-24T13:30Z (de.1); name similarity 1.00
+the-odds-api,VfB Stuttgart,VfB Stuttgart,same kickoff 2026-10-23T18:30Z (de.1); name similarity 1.00
+the-odds-api,Werder Bremen,SV Werder Bremen,same kickoff 2026-10-24T13:30Z (de.1); name similarity 0.90
+the-odds-api,Arsenal,Arsenal FC,same kickoff 2026-10-24T14:00Z (en.1); name similarity 1.00
+the-odds-api,Aston Villa,Aston Villa FC,same kickoff 2026-10-24T11:30Z (en.1); name similarity 1.00
+the-odds-api,Bournemouth,AFC Bournemouth,same kickoff 2026-10-25T14:00Z (en.1); name similarity 1.00
+the-odds-api,Brentford,Brentford FC,same kickoff 2026-10-25T14:00Z (en.1); name similarity 1.00
+the-odds-api,Brighton and Hove Albion,Brighton & Hove Albion FC,same kickoff 2026-10-31T15:00Z (en.1); name similarity 0.91
+the-odds-api,Chelsea,Chelsea FC,same kickoff 2026-10-24T16:30Z (en.1); name similarity 1.00
+the-odds-api,Coventry City,Coventry City FC,same kickoff 2026-10-24T14:00Z (en.1); name similarity 1.00
+the-odds-api,Crystal Palace,Crystal Palace FC,same kickoff 2026-10-25T14:00Z (en.1); name similarity 1.00
+the-odds-api,Everton,Everton FC,same kickoff 2026-10-24T14:00Z (en.1); name similarity 1.00
+the-odds-api,Fulham,Fulham FC,same kickoff 2026-10-24T14:00Z (en.1); name similarity 1.00
+the-odds-api,Hull City,Hull City AFC,same kickoff 2026-10-25T14:00Z (en.1); name similarity 1.00
+the-odds-api,Ipswich Town,Ipswich Town FC,same kickoff 2026-10-23T19:00Z (en.1); name similarity 1.00
+the-odds-api,Leeds United,Leeds United FC,same kickoff 2026-10-25T16:30Z (en.1); name similarity 1.00
+the-odds-api,Liverpool,Liverpool FC,same kickoff 2026-10-25T14:00Z (en.1); name similarity 1.00
+the-odds-api,Manchester City,Manchester City FC,same kickoff 2026-10-24T11:30Z (en.1); name similarity 1.00
+the-odds-api,Manchester United,Manchester United FC,same kickoff 2026-10-25T14:00Z (en.1); name similarity 1.00
+the-odds-api,Newcastle United,Newcastle United FC,same kickoff 2026-10-25T14:00Z (en.1); name similarity 1.00
+the-odds-api,Nottingham Forest,Nottingham Forest FC,same kickoff 2026-10-23T19:00Z (en.1); name similarity 1.00
+the-odds-api,Sunderland,Sunderland AFC,same kickoff 2026-10-25T16:30Z (en.1); name similarity 1.00
+the-odds-api,Tottenham Hotspur,Tottenham Hotspur FC,same kickoff 2026-10-24T16:30Z (en.1); name similarity 1.00
+the-odds-api,Alavés,Deportivo Alavés,same kickoff 2026-10-23T19:00Z (es.1); name similarity 0.55
+the-odds-api,Athletic Bilbao,Athletic Club,same kickoff 2026-10-21T18:00Z (es.1); name similarity 0.70
+the-odds-api,Atlético Madrid,Club Atlético de Madrid,same kickoff 2026-10-24T19:00Z (es.1); name similarity 1.00
+the-odds-api,Barcelona,FC Barcelona,same kickoff 2026-10-25T20:00Z (es.1); name similarity 1.00
+the-odds-api,CA Osasuna,CA Osasuna,same kickoff 2026-10-26T20:00Z (es.1); name similarity 1.00
+the-odds-api,Celta Vigo,RC Celta de Vigo,same kickoff 2026-10-25T15:15Z (es.1); name similarity 0.87
+the-odds-api,Deportivo La Coruña,RC Deportivo La Coruña,same kickoff 2026-10-24T19:00Z (es.1); name similarity 0.93
+the-odds-api,Elche CF,Elche CF,same kickoff 2026-10-24T12:00Z (es.1); name similarity 1.00
+the-odds-api,Espanyol,RCD Espanyol de Barcelona,same kickoff 2026-10-30T20:00Z (es.1); name similarity 0.53
+the-odds-api,Getafe,Getafe CF,same kickoff 2026-10-25T13:00Z (es.1); name similarity 1.00
+the-odds-api,Levante,Levante UD,same kickoff 2026-10-31T13:00Z (es.1); name similarity 0.82
+the-odds-api,Málaga,Málaga CF,same kickoff 2026-10-23T19:00Z (es.1); name similarity 1.00
+the-odds-api,Rayo Vallecano,Rayo Vallecano de Madrid,same kickoff 2026-10-24T12:00Z (es.1); name similarity 0.80
+the-odds-api,Real Betis,Real Betis Balompié,same kickoff 2026-10-25T15:15Z (es.1); name similarity 0.69
+the-odds-api,Real Madrid,Real Madrid CF,same kickoff 2026-10-25T20:00Z (es.1); name similarity 1.00
+the-odds-api,Real Racing Club de Santander,Real Racing Club de Santander,same kickoff 2026-10-24T14:15Z (es.1); name similarity 1.00
+the-odds-api,Real Sociedad,Real Sociedad de Fútbol,same kickoff 2026-10-25T17:30Z (es.1); name similarity 0.79
+the-odds-api,Sevilla,Sevilla FC,same kickoff 2026-10-26T20:00Z (es.1); name similarity 1.00
+the-odds-api,Valencia,Valencia CF,same kickoff 2026-10-24T16:30Z (es.1); name similarity 1.00
+the-odds-api,Villarreal,Villarreal CF,same kickoff 2026-10-24T16:30Z (es.1); name similarity 1.00
+the-odds-api,AC Milan,AC Milan,same kickoff 2026-10-25T19:45Z (it.1); name similarity 1.00
+the-odds-api,AS Roma,AS Roma,same kickoff 2026-10-24T16:00Z (it.1); name similarity 1.00
+the-odds-api,Atalanta BC,Atalanta BC,same kickoff 2026-10-25T14:00Z (it.1); name similarity 1.00
+the-odds-api,Bologna,Bologna FC 1909,same kickoff 2026-10-24T13:00Z (it.1); name similarity 0.74
+the-odds-api,Cagliari,Cagliari Calcio,same kickoff 2026-10-24T13:00Z (it.1); name similarity 1.00
+the-odds-api,Como,Como 1907,same kickoff 2026-10-24T13:00Z (it.1); name similarity 1.00
+the-odds-api,Fiorentina,ACF Fiorentina,same kickoff 2026-10-29T19:45Z (it.1); name similarity 0.83
+the-odds-api,Frosinone,Frosinone Calcio,same kickoff 2026-10-25T14:00Z (it.1); name similarity 1.00
+the-odds-api,Genoa,Genoa CFC,same kickoff 2026-10-28T19:45Z (it.1); name similarity 0.71
+the-odds-api,Inter Milan,FC Internazionale Milano,same kickoff 2026-10-25T11:30Z (it.1); name similarity 0.69
+the-odds-api,Juventus,Juventus FC,same kickoff 2026-10-25T17:00Z (it.1); name similarity 1.00
+the-odds-api,Lazio,SS Lazio,same kickoff 2026-10-24T18:45Z (it.1); name similarity 0.77
+the-odds-api,Lecce,US Lecce,same kickoff 2026-10-25T17:00Z (it.1); name similarity 0.77
+the-odds-api,Monza,AC Monza,same kickoff 2026-10-23T18:45Z (it.1); name similarity 1.00
+the-odds-api,Napoli,SSC Napoli,same kickoff 2026-10-24T16:00Z (it.1); name similarity 1.00
+the-odds-api,Parma,Parma Calcio 1913,same kickoff 2026-10-24T18:45Z (it.1); name similarity 0.67
+the-odds-api,Sassuolo,US Sassuolo Calcio,same kickoff 2026-10-27T17:30Z (it.1); name similarity 0.84
+the-odds-api,Torino,Torino FC,same kickoff 2026-10-23T18:45Z (it.1); name similarity 1.00
+the-odds-api,Udinese,Udinese Calcio,same kickoff 2026-10-25T19:45Z (it.1); name similarity 1.00
+the-odds-api,Venezia,Venezia FC,same kickoff 2026-10-25T14:00Z (it.1); name similarity 1.00
+the-odds-api,ADO Den Haag,ADO Den Haag,same kickoff 2026-10-24T19:00Z (nl.1); name similarity 1.00
+the-odds-api,AZ Alkmaar,AZ,same kickoff 2026-10-31T20:00Z (nl.1); name similarity 0.33
+the-odds-api,Ajax,AFC Ajax,same kickoff 2026-10-25T15:45Z (nl.1); name similarity 1.00
+the-odds-api,Excelsior,SBV Excelsior,same kickoff 2026-10-25T11:15Z (nl.1); name similarity 0.82
+the-odds-api,FC Twente Enschede,FC Twente '65,same kickoff 2026-10-25T19:00Z (nl.1); name similarity 0.56
+the-odds-api,FC Utrecht,FC Utrecht,same kickoff 2026-10-24T14:30Z (nl.1); name similarity 1.00
+the-odds-api,FC Zwolle,PEC Zwolle,same kickoff 2026-10-24T14:30Z (nl.1); name similarity 0.75
+the-odds-api,Feyenoord,Feyenoord Rotterdam,same kickoff 2026-10-31T15:30Z (nl.1); name similarity 0.64
+the-odds-api,Fortuna Sittard,Fortuna Sittard,same kickoff 2026-10-25T11:15Z (nl.1); name similarity 1.00
+the-odds-api,Go Ahead Eagles,Go Ahead Eagles,same kickoff 2026-10-23T18:00Z (nl.1); name similarity 1.00
+the-odds-api,Groningen,FC Groningen,same kickoff 2026-10-25T13:30Z (nl.1); name similarity 1.00
+the-odds-api,Heerenveen,SC Heerenveen,same kickoff 2026-10-24T19:00Z (nl.1); name similarity 1.00
+the-odds-api,NEC Nijmegen,NEC,same kickoff 2026-10-25T13:30Z (nl.1); name similarity 0.40
+the-odds-api,PSV Eindhoven,PSV,same kickoff 2026-10-25T13:30Z (nl.1); name similarity 0.38
+the-odds-api,SC Cambuur,SC Cambuur-Leeuwarden,same kickoff 2026-10-24T16:45Z (nl.1); name similarity 0.56
+the-odds-api,SC Telstar,Telstar 1963,same kickoff 2026-10-23T18:00Z (nl.1); name similarity 0.74
+the-odds-api,Sparta Rotterdam,Sparta Rotterdam,same kickoff 2026-10-25T15:45Z (nl.1); name similarity 1.00
+the-odds-api,Willem II,Willem II Tilburg,same kickoff 2026-10-31T17:45Z (nl.1); name similarity 0.69

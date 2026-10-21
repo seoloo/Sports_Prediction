@@ -139,7 +139,7 @@ docker compose --env-file .env -f infra/docker-compose.yml --profile spark run -
 
 
 
-- 다가올 경기의 해외 배당: football-data.co.uk `fixtures.csv`를 직접 내려받아 `data/landing/football-data-co-uk/`에 넣기(자동 다운로드 안 함)
+- 다가올 경기의 해외 배당: The Odds API에서 자동으로 받습니다(5b, `.env`의 `THE_ODDS_API_KEY`, 경기 24·1시간 전). football-data.co.uk `fixtures.csv`를 직접 넣으면 그것을 먼저 씁니다
 
 ### 텔레그램 알림 (로드맵 4b)
 

@@ -62,6 +62,7 @@ def pending_prematch(conn: psycopg.Connection, now: datetime) -> list[dict]:
     rows = conn.execute("""
         SELECT i.match_id, i.offset_label, i.status, i.kickoff_utc, h.canonical_name, a.canonical_name,
                p.display_status, p.withheld_reasons, p.prob_home, p.prob_draw, p.prob_away,
+               v.market_home, v.market_draw, v.market_away
         FROM snapshots.prematch_inputs i
         JOIN silver.matches m USING (match_id)
         JOIN silver.teams h ON h.team_id = m.home_team_id
@@ -79,6 +80,9 @@ def value_line(row: dict) -> str | None:
     if not row.get("value_status"):
         return None
     if row["value_status"] == "COMPARED":
+    if row.get("market_home") is not None:
+        result["market"] = {"HOME": float(row["market_home"]), "DRAW": float(row["market_draw"]),
+                            "AWAY": float(row["market_away"])}
 
 
 def prematch_text(rows: list[dict]) -> str:

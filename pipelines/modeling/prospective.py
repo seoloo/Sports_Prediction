@@ -178,14 +178,8 @@ def record_for_snapshot(conn: psycopg.Connection, match_id: int, offset_label: s
 
 
 def market_probabilities(inputs: dict) -> tuple | None:
-    """스냅샷 입력에 들어 있던(그 시점에 알려진) 시장 평균 마감 전 배당을 마진 뺀 확률로. 없으면 None."""
-    prices = {row["selection"]: float(row["price"]) for row in inputs.get("odds", [])
-              if row["source_id"] == "football-data-co-uk" and row["bookmaker"] == "AVG" and row["market"] == "1X2"
-              and row["timing"] == "PRE_MATCH"}
-    if set(prices) != set(OUTCOMES):
-        return None
-    inverse = [1 / prices[outcome] for outcome in OUTCOMES]
-    return tuple(value / sum(inverse) for value in inverse)
+    fair, _ = market_fair(inputs.get("odds", []))
+    return None if fair is None else tuple(fair[outcome] for outcome in OUTCOMES)
 
 
 def scored_predictions(conn: psycopg.Connection, as_of: datetime) -> list[dict]:
