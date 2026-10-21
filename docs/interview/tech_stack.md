@@ -16,6 +16,7 @@
 | 실행 환경 | Docker Compose(프로필 `streaming`, `airflow`) | — | 사용 중 |
 | CI | GitHub Actions + pytest | checkout@v5, setup-python@v6 / pytest 9.1.1 | 사용 중 |
 | 개인 앱 | Streamlit + SQLite | 1.65.0 / 표준 라이브러리 | 사용 중(기존 카탈로그 앱) |
+| 알림 | 텔레그램 Bot API(표준 라이브러리 urllib) | — | 사용 중(4b), 실제 전송은 토큰 설정 후 |
 | 문서 그림 | HTML → Edge headless → PNG | — | 사용 중 |
 | 레이크 파일 형식 | Parquet(pyarrow) | 25.0.1 | 사용 중(4a) |
 | 분산 처리 | Apache Spark(pyspark, 단일 컨테이너 local 모드) | 4.1.3 | 사용 중(4a). 클러스터 실행은 계획 |
@@ -156,7 +157,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 |---|---|---|---|
 | Spark 클러스터·s3a | 여러 대에서 Spark 실행, S3 직접 읽기 | 지금은 단일 컨테이너로 충분(4a) | 리그 확장으로 자료가 커질 때, 쿠버네티스 단계에서 Spark on Kubernetes와 함께 |
 | Kubernetes + Helm | 수집기·소비자·Postgres 배포, 재시작·자원 제한 | Docker Compose로 개인 PC 운영은 충분하다 | 모델·API까지 서비스가 늘었을 때 kind·k3d로 로컬 클러스터부터 |
-| FastAPI + 모바일 웹 | 휴대폰에서 이번 주 예측·주간 보고서 확인 | 3단계까지 끝났고 다음 단계다. 검증 전 확률은 화면에도 WITHHELD로 보여 준다 | 4단계, 외부 접속 방식 결정 필요 |
+| FastAPI + 모바일 웹 | 휴대폰에서 화면으로 조회 | 지금 볼 것(경기 전 기록, 주간 채점, 장애)은 텔레그램 알림(4b)으로 충분하다. 화면을 만들면 집 PC로 들어오는 길(Tailscale 등)이 필요하다 | 화면이 필요해질 때, 미니 PC와 함께 |
 
 ## 버전을 고정하는 이유
 
