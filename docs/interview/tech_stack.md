@@ -1,6 +1,6 @@
 # 사용한 기술 스택
 
-작성: 2026-10-21(2단계 완료, 3a 시점). 버전은 저장소에 고정된 값입니다(`requirements*.txt`, `infra/docker-compose.yml`, `infra/*/Dockerfile`).
+작성: 2026-10-21(2단계 완료, 3b 시점). 버전은 저장소에 고정된 값입니다(`requirements*.txt`, `infra/docker-compose.yml`, `infra/*/Dockerfile`).
 
 ## 한눈에 보기
 
@@ -11,6 +11,7 @@
 | 정제·분석 DB(Silver·Gold) | PostgreSQL + psycopg | 16.4 / 3.3.6 | 사용 중 |
 | 스트리밍 | Apache Kafka(KRaft) + confluent-kafka | 4.3.1 / 2.15.1 | 사용 중 |
 | 변환·품질 테스트 | dbt-core + dbt-postgres | 1.12.6 / 1.11.0 | 사용 중 |
+| 모델링 | numpy(Poisson·Dixon-Coles 직접 구현) | 2.5.4 | 사용 중(3b) |
 | 오케스트레이션 | Apache Airflow(standalone, LocalExecutor) | 3.3.2 | 사용 중 |
 | 실행 환경 | Docker Compose(프로필 `streaming`, `airflow`) | — | 사용 중 |
 | CI | GitHub Actions + pytest | checkout@v5, setup-python@v6 / pytest 9.1.1 | 사용 중 |
@@ -93,6 +94,15 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
   - Windows 기본 인코딩(CP949) 때문에 한글 SQL 주석을 못 읽어 `PYTHONUTF8=1`을 넣었다(`pipelines/dbt_runner.py`).
 - **대안:** Python(pandas)으로 집계할 수도 있지만, SQL로 두면 DB 안에서 처리되고 다른 사람이 읽기 쉽다. 3a의 누수 검사는 일부러 Python으로 한 번 더 구현해 dbt 결과와 비교한다.
 
+### numpy 2.5.4 (기준 모델)
+
+- **역할:** 3b 기준 모델(Poisson, Dixon-Coles)의 학습과 점수 확률표 계산.
+- **왜 직접 구현했나:** Poisson 로그 선형 모델은 IRLS(반복 가중 최소제곱)로 몇 줄이면 학습된다. 직접 구현해서 ridge 벌점(기록이 적은 팀을 리그 평균 쪽으로 축소)과 시간 감쇠(반감기)를 원하는 방식으로 넣었고, 계수 하나하나를 설명할 수 있다. 한 번 학습에 수 밀리초, 백테스트 전체(실행 36개, 주 단위 재학습 1,473번)가 약 20초.
+- **대안과 판단:** scikit-learn의 `PoissonRegressor`는 관측치 가중치와 벌점을 지원하지만 Dixon-Coles 보정은 없다. statsmodels·scipy는 설치하지 않았다(의존성을 늘릴 만큼 필요하지 않음). Dixon-Coles를 원 논문처럼 모든 계수를 함께 최대화하려면 범용 최적화기(scipy)가 필요해, 지금은 두 단계 근사를 쓰고 그렇다고 문서에 남겼다.
+- **검증:** 정해 둔 계수로 가상 리그를 만들어 학습하면 그 계수를 되찾는지 테스트한다(`tests/test_models.py`).
+- **버전:** 원래 Streamlit을 통해 간접 설치됐는데, 직접 쓰게 되면서 `requirements.txt`에 고정했다.
+- **쓰는 곳:** `pipelines/modeling/models.py`, `pipelines/modeling/backtest.py`.
+
 ### Apache Airflow 3.3.2
 
 - **역할:** 매일 배치(마이그레이션 → 시즌 결정 → 시즌별 수집 → co.uk 파일 수집 → dbt build), 30분마다 경기 전 스냅샷.
@@ -113,7 +123,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 - **역할:** 푸시할 때 실제 Postgres·SeaweedFS·Kafka를 띄우고 전체 테스트와 종단 간 실행을 돌린다.
 - **구성:** Postgres는 서비스 컨테이너, SeaweedFS와 Kafka는 `docker run`으로 띄운다(서비스 컨테이너는 실행 명령을 바꿀 수 없는데, 두 서비스는 실행 명령·환경 설정이 필요하다).
 - **`REQUIRE_INTEGRATION=1`:** 로컬에서는 서비스가 없으면 통합 테스트를 건너뛰지만, CI에서는 건너뛰기를 실패로 본다. "건너뛰어서 통과"를 막기 위해서다.
-- **최근 결과:** run 39539987948, 테스트 259개 통과, dbt `PASS=28`(모델 6 + 테스트 22).
+- **최근 결과:** run 39539987948, 테스트 259개 통과, dbt `PASS=28`(모델 6 + 테스트 22). 3b 이후 로컬 전체 테스트는 279개 통과(CI는 다음 푸시 때 실행).
 
 ### Streamlit 1.65.0 + SQLite (기존 개인 앱)
 
@@ -131,7 +141,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 |---|---|---|---|
 | Spark | 여러 리그·수십 시즌·이벤트 단위 자료의 특징 계산 | 지금 데이터(경기 2,280, 배당 16만 행)는 Postgres가 몇 초에 처리한다. 작은 데이터에 Spark를 쓰면 설명하기 어렵다 | 리그 확장으로 Postgres 처리 시간이 문제가 될 때, Parquet로 내보낸 Gold에서 시작 |
 | Kubernetes + Helm | 수집기·소비자·Postgres 배포, 재시작·자원 제한 | Docker Compose로 개인 PC 운영은 충분하다 | 모델·API까지 서비스가 늘었을 때 kind·k3d로 로컬 클러스터부터 |
-| FastAPI + 모바일 웹 | 휴대폰에서 이번 주 예측 확인 | 검증된 모델이 아직 없다(3b·3c 이후). 검증 전 확률은 보여 주지 않는다 | 3d 주간 보고서가 생긴 뒤 |
+| FastAPI + 모바일 웹 | 휴대폰에서 이번 주 예측 확인 | 검증된 모델이 아직 없다(3b 백테스트에서 시장 배당보다 부정확). 검증 전 확률은 보여 주지 않는다 | 3d 주간 보고서가 생긴 뒤 |
 
 ## 버전을 고정하는 이유
 
@@ -152,6 +162,9 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 
 **Q. MinIO가 아니라 SeaweedFS를 쓴 이유는요?**
 처음엔 MinIO를 쓰려 했는데 이미지를 받을 수 없었습니다. 코드가 S3 표준 SDK(boto3)만 쓰도록 만들어 두었기 때문에 저장소만 SeaweedFS로 바꾸고 코드는 그대로였습니다. 특정 제품이 아니라 S3 API에 맞춰 설계한 덕분입니다.
+
+**Q. 모델은 왜 라이브러리를 안 쓰고 직접 만들었나요?**
+축구 득점의 표준 기준선인 Poisson은 IRLS로 몇 줄이면 학습됩니다. 직접 구현해서 기록이 적은 팀을 리그 평균으로 당기는 벌점과 오래된 경기를 덜 보는 시간 감쇠를 원하는 방식으로 넣었고, 가상 데이터로 정답 계수를 되찾는 테스트로 구현을 검증했습니다. 복잡한 모델은 이 기준선을 넘는지 보는 3c 이후에 검토합니다.
 
 **Q. Airflow와 Kafka 소비자는 어떻게 나눴나요?**
 Airflow는 "정해진 시각에 시작해서 끝나는 작업"(일일 배치, 30분 스냅샷)을 맡고, Kafka 소비자와 API 수집기는 계속 떠 있는 별도 컨테이너입니다. 상시 프로세스를 Airflow 작업으로 돌리면 작업 슬롯을 계속 차지하고 재시작 관리도 어색해집니다.
