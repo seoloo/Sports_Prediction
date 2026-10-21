@@ -63,12 +63,14 @@
 | `silver.live_match_revisions` | 1,752 | football-data.org 경기 상태·점수의 버전(published_at = API 갱신 시각) |
 | `silver.match_stats_revisions` | 1,969 | 경기 기록(슈팅·유효 슈팅·퇴장)의 버전(co.uk, 3g) |
 | `silver.odds_revisions` | 166,589 | 배당의 버전(북메이커 × 시장 × 선택지 × 시점) |
+| `silver.games` | 0(키 대기) | NBA 경기의 정체성(소스 경기 ID). 같은 대진이 여러 번 열려 축구 `matches`와 분리(5d) |
+| `silver.game_revisions` | 0(키 대기) | NBA 일정·상태·점수의 버전. 무승부 없음을 CHECK로 강제 |
 | `silver.quality_issues` | 2 | 수집 단계에서 걸러낸 레코드와 사유 |
 | `silver.stream_rejections` | 0 | 스트리밍에서 반영하지 않은 이벤트와 사유 |
 
 **규칙**
 
-- **정체성과 내용을 나눈다.** `matches`는 "어떤 경기인가"만, 바뀔 수 있는 일정·점수는 `*_revisions`에 버전으로.
+- **정체성과 내용을 나눈다.** `matches`는 "어떤 경기인가"만, 바뀔 수 있는 일정·점수는 `*_revisions`에 버전으로. 정체성의 키는 종목 규칙에 맞춘다: 축구 리그는 (리그, 시즌, 홈, 원정)이 한 번뿐이지만 NBA는 같은 대진이 여러 번 열려 소스 경기 ID를 쓴다(`silver.games`).
 - **덮어쓰지 않는다.** 내용이 바뀐 경우에만 다음 버전을 추가하고, 수정·삭제는 트리거가 막는다.
 - **시점을 기록한다.** 모든 버전에 `published_at`(출처 발표 시각, 모르면 NULL)과 `received_at`(받은 시각)이 있다.
 - **기준 시각 함수로 읽는다.** `silver.match_revisions_known_at(as_of)` 등은 그 시점에 알려진 최신 버전만 돌려준다.

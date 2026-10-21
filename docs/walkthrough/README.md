@@ -21,5 +21,6 @@
 | 5a | [다섯 리그로 확장](5a_multi_league.md) | 소스 확인, 리그 목록 한곳에, 팀 대조표 76개 검토, 수집기·DAG 확장, 모델 없는 리그는 보류 |
 | 5b | [The Odds API 배당 자동 수집](5b_odds_api.md) | 이용 조건, 크레딧 예산(24·1시간 전만), 팀 대조표 96개, Pinnacle 우선 해외 기준 확률, 수동 fixtures.csv 대체 |
 | 5c | [리그별 모델](5c_league_models.md) | 리그별 백테스트·평가·활성 모델, 리그마다 다른 설정·무승부·승격 팀 경향, 시장 비교 자료가 없는 리그의 검증 |
+| 5d-a | [NBA 경기 수집](5d_nba_games.md) | balldontlie 약관, 축구와 다른 경기 정체성(같은 대진 반복·무승부 없음), 쪽 단위 Bronze, 분당 5회, 키 받는 방법 |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md), 주제별(예외 처리·메달리온·기술 스택) 정리는 [면접 준비 문서](../interview/README.md)를 함께 보세요.

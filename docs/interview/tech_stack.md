@@ -18,6 +18,7 @@
 | 개인 앱 | Streamlit + SQLite | 1.65.0 / 표준 라이브러리 | 사용 중(기존 카탈로그 앱) |
 | 알림 | 텔레그램 Bot API(표준 라이브러리 urllib) | — | 사용 중(4b), 실제 전송은 토큰 설정 후 |
 | 배당 API | The Odds API(무료 Starter, 월 500크레딧) | v4 | 사용 중(5b): 다섯 리그, 경기 24·1시간 전, Pinnacle 우선 |
+| NBA 경기 API | balldontlie(무료, 분당 5회, `Authorization` 헤더 키) | v1 | 수집기·DAG 준비(5d-a), 키 받으면 실제 수집 |
 | 문서 그림 | HTML → Edge headless → PNG | — | 사용 중 |
 | 레이크 파일 형식 | Parquet(pyarrow) | 25.0.1 | 사용 중(4a) |
 | 분산 처리 | Apache Spark(pyspark, 단일 컨테이너 local 모드) | 4.1.3 | 사용 중(4a). 클러스터 실행은 계획 |

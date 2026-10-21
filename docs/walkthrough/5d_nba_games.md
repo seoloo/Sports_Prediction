@@ -1,0 +1,127 @@
+# 5d-a. NBA 경기 수집: balldontlie, 축구와 분리한 경기 테이블
+
+작성: 2026-10-21. 상태: **수집기·테이블·DAG 완료, 실제 수집은 balldontlie 키를 받은 뒤**입니다.
+
+## 5d 계획
+
+| 단계 | 내용 | 선행 조건 |
+|---|---|---|
+| **5d-a(이 문서)** | balldontlie 약관 검토, NBA 경기 테이블, 수집기, 매일 DAG | 키(사용자) |
+| 5d-b | The Odds API `basketball_nba` 배당(승패 2지선다), 크레딧 예산 다시 계산 | 없음(키 있음) |
+| 5d-c | NBA 모델(무승부 없는 2지선다, 점수 차 기반 팀 등급 등), 시간순 백테스트·평가 | 5d-a 과거 시즌 |
+
+## 한 줄 요약
+
+NBA 경기 일정·결과를 balldontlie에서 받는 수집기를 만들었습니다. NBA는 같은 홈·원정 대진이 한 시즌에 여러 번 열리고 무승부가 없어서, 축구 `silver.matches`에 넣지 않고 소스 경기 ID를 정체성으로 쓰는 `silver.games`·`silver.game_revisions`를 새로 만들었습니다. 축구 모델·dbt·스냅샷은 이 테이블을 읽지 않으므로 섞이지 않습니다. 키가 없으면 수집기는 `NOT_CONFIGURED`로 끝나고, 키를 넣으면 다음 날 12:00 UTC부터 매일 돕니다.
+
+## 이용 조건 검토(2026-10-21, 약관 2026-10-20판)
+
+| 항목 | 내용 | 이 프로젝트 |
+|---|---|---|
+| 이용 목적 | 합법적으로 받은 데이터는 개인·상업 목적 모두 가능 | 개인 분석·포트폴리오 |
+| 저장 | 복사·저장·보관 허용, 보관 기한 없음 | Bronze에 원본 보존 |
+| 모델 | 모델 학습·평가·백테스트 명시적 허용 | 5d-c |
+| 출처 표시 | 의무 없음 | README에 출처는 적어 둠 |
+| 금지 | 데이터로 대체 스포츠 데이터 API·피드를 만들어 남에게 제공, 공식 인터페이스 밖 자동 수집, 요청 한도 회피, 키 공유 | 공식 API만, 분당 5회 준수, 남에게 제공 안 함, 키는 `.env`만 |
+| 무료 등급 | 분당 5회. teams·players·games 엔드포인트 | games만 사용 |
+
+검토 결과는 `ingest.sources`에 데이터로 남겼습니다(`pipelines/sql/013_basketball_games.sql`). 축구 소스 검토 문서에도 한 줄 추가했습니다([소스 검토](../football_data_sources.md)).
+
+## 왜 축구 테이블에 넣지 않았나
+
+| 축구 리그 | NBA |
+|---|---|
+| (리그, 시즌, 홈, 원정)은 한 번뿐. 이것을 `silver.matches`의 유일 키로 씀 | 같은 대진이 정규 시즌 1~2번, 플레이오프 최대 4번 더 |
+| 무승부 있음(1X2 3지선다) | 무승부 없음(연장), 승패 2지선다 |
+| 전후반 점수 | 쿼터·연장 |
+
+축구 키를 억지로 바꾸면 축구 수집기·dbt·스냅샷이 모두 영향을 받습니다. 그래서 정체성을 **소스 경기 ID**(`UNIQUE(source_id, external_id)`)로 하는 별도 테이블을 두었습니다. 버전·불변 트리거·기준 시각 함수(`silver.game_revisions_known_at(as_of)`)는 축구와 같은 규칙입니다. 팀은 공용 `silver.teams`를 쓰되 `sport` 열(기존 152팀은 `football`)을 추가했고, 같은 이름의 축구 팀이 있으면 섞지 않고 수집을 실패시킵니다.
+
+## 흐름
+
+```text
+balldontlie_nba_daily DAG(매일 12:00 UTC = 미국 동부 08:00, 전날 밤 경기가 끝난 뒤)
+ └ ingest(현재 시즌)
+    ├ /v1/games?seasons[]=2026&per_page=100 → meta.next_cursor로 끝까지(시즌 ≈ 14쪽, 분당 5회 → 약 3분)
+    ├ Bronze: 쪽마다 응답 바이트 그대로 balldontlie/nba/2026-27/sha256=….json (같은 내용은 한 번만)
+    ├ 정규화(순수 함수): 상태·점수·연장 횟수, 문제 있는 경기는 quality_issues
+    └ Silver: 처음 보는 경기 → silver.games, 내용이 바뀐 경기만 → silver.game_revisions 새 버전
+```
+
+## 설계 결정과 이유
+
+| 결정 | 위치 | 이유 |
+|---|---|---|
+| 정체성 = 소스 경기 ID | `silver.games` | 같은 대진 반복을 담는 유일한 안정적 키. 홈·원정·시즌·포스트시즌은 처음 본 값으로 고정 |
+| 무승부 없음을 DB가 강제 | `game_revisions` CHECK | 끝난 경기는 점수가 있고 같지 않아야 한다. 코드 실수가 있어도 잘못된 결과가 들어가지 않는다 |
+| 예정 경기의 0점은 NULL | `normalize_game` | 소스는 시작 전에도 0 대 0을 준다. 0은 "실제 0점"이 아니라 "모름"이다 |
+| 상태 네 가지 | `_status` | `postponed` → POSTPONED, `final` → FINISHED, 진행 쿼터가 있으면 IN_PROGRESS, 나머지 SCHEDULED. 소스의 `status` 문자열("7:30 pm ET")은 시각이라 그대로 믿지 않는다 |
+| 쪽 단위 Bronze | `ingest` | 시즌 전체를 한 파일로 합치면 받은 바이트가 아니게 된다. 쪽마다 원본 그대로 두고, 바뀐 쪽만 새 원본이 된다 |
+| 시즌 단위로 다시 받기 | `fetch_season` | 하루 14번 요청이면 충분하고, 날짜 범위만 받으면 지난 경기의 정정을 놓친다 |
+| 발표 시각 모름 | `published_at = NULL` | 소스가 주지 않는다. 받은 시각만 기록하고, 과거 재구성(시작 + 3시간)은 축구와 같은 가정을 5d-c에서 쓴다 |
+| 키는 헤더로만 | `fetch_page` | `Authorization` 헤더. 오류 메시지에 헤더를 넣지 않고 원래 예외를 끊는다 |
+| 축구 DAG와 분리 | `dags/balldontlie_nba_daily.py` | 소스·일정·실패 원인이 다르다. 한쪽 장애가 다른 쪽 수집을 막지 않는다 |
+| 키 없으면 실패가 아님 | `NOT_CONFIGURED` | 키를 넣기 전에도 DAG를 켜 둘 수 있다. 넣으면 자동으로 시작 |
+
+## 사용한 기술
+
+| 기술 | 어디에 | 어떻게 썼나 |
+|---|---|---|
+| REST API + cursor 페이지네이션 | `fetch_season` | 응답의 `meta.next_cursor`가 없을 때까지 다음 쪽을 요청. 끝나지 않는 응답에 대비해 40쪽 상한 |
+| `urllib.request` + `Authorization` 헤더 | `fetch_page` | 표준 라이브러리로 요청, 키는 URL이 아니라 헤더에 |
+| 슬라이딩 윈도 요청 제한 | `pipelines/ingest/rate_limit.py` | 최근 60초 요청 시각을 `deque`에 두고 분당 5회를 넘지 않게 기다림. 429는 60초 막고 다시 시도. football-data.org 수집기와 같은 부품(이번에 의존성 없는 모듈로 분리) |
+| Postgres DDL: `ALTER TABLE … ADD COLUMN … DEFAULT`, CHECK, UNIQUE, 트리거 | `013_basketball_games.sql` | 기존 152팀에 `sport='football'`이 채워진 열 추가. 무승부 금지·점수 쌍·예정 경기 점수 없음을 CHECK로 |
+| SQL 함수(`DISTINCT ON`) | `silver.game_revisions_known_at` | 기준 시각에 알려진 경기별 최신 버전 |
+| Postgres advisory lock | `pg_advisory_xact_lock` | 같은 시즌을 두 실행이 동시에 쓰면 버전 번호가 겹치므로 데이터셋 단위로 잠금 |
+| SHA-256 내용 해시 | Bronze 경로, `content_hash` | 같은 원본은 한 번만 저장, 같은 경기 내용은 새 버전을 만들지 않음 |
+| SeaweedFS(S3) + boto3 | `put_if_absent` | 쪽마다 원본을 그대로 보존 |
+| 불변 `dataclass(frozen=True)` | `NormalizedGame` | 정규화 결과를 바꿀 수 없는 값으로. 해시는 바뀔 수 있는 열만으로 계산 |
+| Airflow 3 TaskFlow(`@dag`, `@task`) | `dags/balldontlie_nba_daily.py` | 매일 12:00 UTC, 실패하면 텔레그램 알림 콜백 |
+| pytest 가짜 opener·가짜 시계 | `tests/test_balldontlie.py` | 네트워크·실제 대기 없이 cursor·429·401을 시험 |
+
+## 2026-10-21 확인 결과
+
+| 확인 | 결과 |
+|---|---|
+| 마이그레이션 013 | 운영 DB 적용, 기존 152팀 모두 `football`, `ingest.sources`에 balldontlie |
+| dbt build | PASS=34(축구 Gold 영향 없음) |
+| Airflow | `balldontlie_nba_daily` 불러오기 오류 없음, 켜 둠. 컨테이너에서 실행 → `NOT_CONFIGURED`(키 없음) |
+| 처음 컨테이너 실행 | `No module named 'confluent_kafka'`로 실패 → 제한기를 의존성 없는 모듈로 분리해 해결([예외 처리 기록](../interview/error_handling.md) 24번) |
+| 테스트 | 8개 추가(단위 6, Postgres·S3 통합 2) |
+
+## 테스트가 확인하는 것
+
+| 테스트 | 확인 내용 |
+|---|---|
+| `test_seasons_follow_the_nba_calendar` | 2025 ↔ "2025-26", 10월에는 새 시즌, 6월 결승은 이전 시즌 |
+| `test_normalize_keeps_unknown_scores_unknown_and_rejects_ties` | 예정 경기 0점 → NULL, 연장 횟수, 진행 중 동점 허용, 연기, 끝난 경기 동점·같은 팀·깨진 레코드는 품질 문제 |
+| `test_content_hash_ignores_identity_and_tracks_scores` | 위치가 달라도 같은 내용이면 같은 해시, 점수가 바뀌면 다른 해시 |
+| `test_fetch_season_follows_cursor_with_key_in_header_only` | cursor로 두 쪽, 키는 헤더에만 |
+| `test_rate_limit_is_retried_and_errors_never_leak_the_key` | 429는 다시 시도, 401 오류에 키 없음 |
+| `test_without_key_nothing_runs` | 키 없으면 `NOT_CONFIGURED` |
+| `test_ingest_versions_only_changes_and_allows_repeated_pairings` | 같은 대진 3경기(정규 시즌 + 플레이오프) 저장, 축구 `matches` 0행, 같은 원본 재수집 시 버전·업로드 0, 플레이오프 경기가 끝나면 그 경기만 새 버전, 기준 시각 조회가 그때 알던 상태를 돌려줌 |
+| `test_basketball_name_never_reuses_a_football_team` | 같은 이름의 축구 팀이 있으면 실행 실패로 기록 |
+
+## 직접 하실 일(한 번만)
+
+1. https://www.balldontlie.io 에서 가입하고 무료(Free) 등급을 고릅니다.
+2. 계정 화면의 API 키를 복사해 저장소의 `.env`에 `BALLDONTLIE_API_KEY=키` 한 줄을 넣습니다(키는 채팅에 붙여 넣지 마세요).
+3. 넣었다고 알려 주시면 제가 Airflow 컨테이너를 다시 띄워 키를 반영하고, 과거 시즌을 수집해 확인합니다. 그 뒤로는 매일 자동입니다.
+
+## 면접에서 나올 만한 질문
+
+**Q. 축구와 농구를 한 테이블에 넣으면 더 단순하지 않나요?**
+테이블 수는 줄지만 키가 틀립니다. 축구 리그는 (리그, 시즌, 홈, 원정)이 한 번뿐이라 이것을 키로 써서 소스가 달라도 같은 경기를 찾습니다. NBA는 같은 대진이 여러 번 열려 이 키가 성립하지 않습니다. 키를 바꾸면 이미 동작하는 축구 수집·dbt·스냅샷을 모두 다시 검증해야 합니다. 그래서 규칙(버전, 불변, 기준 시각 함수)은 같게 하고 정체성만 종목에 맞춘 테이블을 따로 두었습니다.
+
+**Q. 예정 경기의 0점을 왜 NULL로 바꾸나요?**
+소스는 시작 전에도 0 대 0을 줍니다. 그대로 넣으면 "0 대 0으로 끝난 경기"와 구분이 안 되고, 학습 데이터에 들어가면 조용히 틀립니다. 이 프로젝트의 원칙은 결측과 0을 구분하는 것입니다. DB CHECK도 예정·연기 경기는 점수가 없어야 한다고 강제합니다.
+
+**Q. 분당 5회 제한에서 시즌 전체를 매일 받는 게 괜찮나요?**
+시즌 하나는 약 14쪽이라 3분이면 됩니다. 날짜 범위만 받으면 요청은 줄지만, 지난 경기 점수가 정정되면 놓칩니다. 바뀐 쪽만 새 원본·새 버전이 되므로 저장 공간도 늘지 않습니다.
+
+## 한계
+
+- **실제 API로는 아직 받아 보지 않았습니다.** 응답 형식은 공식 문서 기준이고, 가짜 응답으로만 시험했습니다. 키를 받으면 첫 수집에서 형식(특히 `status_state` 값, 오래된 시즌의 `datetime`)을 확인합니다.
+- **발표 시각이 없습니다.** 경기 결과가 언제 확정됐는지 모르므로 받은 시각만 씁니다.
+- **과거 시즌 범위는 5d-c에서 정합니다.** 2019-20(중립 경기장 버블)과 2020-21(관중 제한)은 홈 이점이 달라 학습에 그대로 넣기 어렵습니다.
+- **선수·부상 정보는 쓰지 않습니다.** 무료 등급에 부상 엔드포인트가 없습니다.
