@@ -58,7 +58,7 @@ Airflow가 전체 작업 순서와 재시도를 관리합니다.
 | 1c. 배당 수집 ✅ | landing 폴더의 football-data.co.uk CSV를 Bronze·Silver로 | 수동 다운로드 파일만 처리, 원본 Git 제외 | CSV 수동 다운로드 |
 | 1d. 품질·오케스트레이션 ✅ | dbt 모델과 테스트, Airflow DAG, CI | DAG 재실행 시 결과 동일, 테스트 통과 | 없음 |
 | 2. 스트리밍·매치데이 자동 분석 ✅ | Kafka, football-data.org 폴링 수집기, 과거 시즌 재생기, 수동 배당 이벤트, 마감 전 정해진 시각의 자동 스냅샷 | 이벤트 중복·지연 도착 처리, 분당 요청 제한 준수, 정해진 시각마다 스냅샷 누락 없음 | football-data.org 키 |
-| 3. 모델·검증 (진행 중: 3a ✅) | EPL Poisson/Dixon-Coles 기준 모델, 시간순 백테스트, 시장 배당 비교, 모의 기록 | 누수 검사 통과, Log loss·Brier를 기준 모델·배당과 비교, 보류율 공개 | 없음 |
+| 3. 모델·검증 ✅ | EPL Poisson/Dixon-Coles 기준 모델, 시간순 백테스트, 시장 배당 비교, 모의 기록 | 누수 검사 통과, Log loss·Brier를 기준 모델·배당과 비교, 보류율 공개 | 없음 |
 | 4. 서빙·배포 | FastAPI 조회 API, 모바일 화면, kind/k3d 배포 | 휴대폰에서 예측 스냅샷 조회 | 외부 접속 방식 결정 |
 
 
@@ -69,7 +69,7 @@ Airflow가 전체 작업 순서와 재시도를 관리합니다.
 | 3a | 시간순 학습 데이터셋 `gold.match_features_pit`(과거 재구성 가정: 결과는 시작 3시간 뒤 공개), 두 겹의 누수 검사 | ✅ |
 | 3b | 기준 모델: 단순 비율 → Poisson → Dixon-Coles, 주 단위 재학습 백테스트(검증 시즌에서 설정 선택, 시험 시즌은 한 번만 평가), 기록이 적은 팀은 리그 평균 쪽으로 축소, 실행·예측을 `modeling` 스키마에 버전과 함께 기록 | ✅ |
 | 3c | 평가 보고서: 주 단위 블록 부트스트랩 불확실성, 확률 보정(ECE·Wilson 구간), 약한 곳(승격 팀·시즌 초반·무승부), 검증 기준(VALIDATED/NOT_VALIDATED), `modeling.evaluation_reports`와 자동 생성 Markdown | ✅ |
-| 3d | 경기 전 스냅샷에 모델 확률 저장(검증 기준 통과 전에는 WITHHELD), 경기 후 채점, 주간 보고서 DAG | 다음 |
+| 3d | 경기 전 스냅샷에 모델 예측 저장(같은 as_of를 DB가 강제, 검증 기준 통과 전에는 WITHHELD), 경기 후 채점, 주간 보고서 DAG(`weekly_model_report`, 화요일 06:00 UTC) | ✅ |
 
 ## 경기 주기에 맞춘 자동 분석 (준실시간)
 

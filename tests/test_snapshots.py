@@ -40,8 +40,12 @@ def test_snapshots_are_taken_once_missed_ones_are_not_backfilled(season):
     s = season
     first = KICKOFF - timedelta(hours=2, minutes=30)
     assert snapshots.run(now=first, settings=s) == {"TAKEN": 1, "MISSED": 1, "upcoming_matches": 1,
-                                                    "recently_started_matches": 0}
+                                                    "recently_started_matches": 0, "PREDICTION_WITHHELD": 1}
     assert rows(s) == [("T-24H", "MISSED", False), ("T-3H", "TAKEN", True)]
+    # 찍은 스냅샷에만 같은 as_of의 예측이 붙는다. 이 DB에는 백테스트가 없어 활성 모델이 없으므로 확률 없이 보류.
+    assert query(s, """SELECT offset_label, as_of = %s, prob_home, display_status, withheld_reasons
+                       FROM snapshots.prematch_predictions""", (first,)) == [
+        ("T-3H", True, None, "WITHHELD", ["NO_ACTIVE_MODEL", "LOW_TEAM_HISTORY(<5)"])]
     assert snapshots.run(now=first, settings=s)["TAKEN"] == 0  # 멱등: 같은 시각에 다시 불러도 새 기록 없음
     snapshots.run(now=KICKOFF - timedelta(minutes=40), settings=s)
     assert rows(s)[-1] == ("T-1H", "TAKEN", True)
@@ -60,7 +64,7 @@ def test_inputs_use_only_what_was_known_and_are_deterministic(season):
         inputs = snapshots.build_inputs(conn, match_id, as_of)
         again = snapshots.build_inputs(conn, match_id, as_of)
     assert snapshots.inputs_hash(inputs) == snapshots.inputs_hash(again)
-    assert inputs["match"]["home"] == "Delta FC" and inputs["model_status"] == "UNTRAINED"
+    assert inputs["match"]["home"] == "Delta FC" and "model_status" not in inputs   # 모델 예측은 별도 테이블(3d)
     # Delta FC의 이전 끝난 경기: Gamma 0-0 Delta(원정). Alpha FC: Alpha 2-1 Beta(홈). 시작 이후 경기는 들어가지 않는다.
     assert [(f["opponent"], f["venue"], f["goals_for"], f["goals_against"]) for f in inputs["home_form"]] == [("Gamma FC", "AWAY", 0, 0)]
     assert [(f["opponent"], f["venue"], f["goals_for"]) for f in inputs["away_form"]] == [("Beta FC", "HOME", 2)]

@@ -41,11 +41,13 @@
 | [pipelines/modeling/dataset.py](../pipelines/modeling/dataset.py) | 시간순 데이터셋 읽기, Python 독립 재계산으로 누수 검사(3a) | `load_dataset`, `verify_point_in_time` |
 | [pipelines/modeling/models.py](../pipelines/modeling/models.py) | 기준 모델: 단순 비율, Poisson(ridge IRLS·시간 감쇠), Dixon-Coles(3b) | `PoissonModel.fit`, `DixonColesModel.fit`, `outcome_probabilities` |
 | [pipelines/modeling/backtest.py](../pipelines/modeling/backtest.py) | 주 단위 재학습 백테스트, 검증 시즌에서 설정 선택, 시험 시즌 평가, 실행·예측 기록(3b) | `walk_forward`, `summarize`, `store_run`, `run` |
+| [pipelines/modeling/prospective.py](../pipelines/modeling/prospective.py) | 스냅샷 시점의 모델 예측(실제 수신 자료만, 검증 전 WITHHELD), 경기 후 채점, 주간 보고서(3d) | `active_model`, `Predictor`, `record_for_snapshot`, `run_weekly` |
 | [pipelines/modeling/evaluation.py](../pipelines/modeling/evaluation.py) | 저장된 시험 예측 평가: 블록 부트스트랩, 확률 보정, 약한 곳, 검증 기준, 보고서 저장·Markdown 생성(3c) | `block_bootstrap`, `calibration`, `segments`, `gate`, `render_markdown` |
 | [dbt/models/](../dbt/models/) | `staging.stg_matches_known` → `gold.team_match_results` → `gold.league_standings`, `staging.stg_odds_known` → `gold.match_odds_1x2` | — |
 | [dbt/tests/](../dbt/tests/) | 순위표 정합성·끝난 경기당 팀 행 2개 검사 | — |
 | [dags/openfootball_epl_daily.py](../dags/openfootball_epl_daily.py) | 매일 스키마 확인 → 시즌별 수집(동적 태스크) → 배당 CSV 수집 → dbt build | — |
-| [dags/prematch_snapshots.py](../dags/prematch_snapshots.py) | 30분마다 경기 전 스냅샷 | — |
+| [dags/prematch_snapshots.py](../dags/prematch_snapshots.py) | 30분마다 경기 전 스냅샷 + 모델 예측 | — |
+| [dags/weekly_model_report.py](../dags/weekly_model_report.py) | 화요일 06:00 UTC 지난주 예측 채점·주간 보고서 | — |
 | [infra/airflow/Dockerfile](../infra/airflow/Dockerfile) | Airflow 3.3.2 이미지 + 파이프라인 라이브러리 + dbt 전용 가상환경 | — |
 | [.github/workflows/ci.yml](../.github/workflows/ci.yml) | CI: Postgres·SeaweedFS를 띄워 전체 테스트와 종단 실행 | — |
 

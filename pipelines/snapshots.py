@@ -7,7 +7,9 @@ Airflow DAG(prematch_snapshots)가 30분마다 run()을 부른다.
 - 최근 7일 안에 이미 시작한 경기도 살펴, 기록이 없는 시점을 모두 MISSED로 남긴다.
   PC가 경기 당일 내내 꺼져 있었던 경우에도 "놓쳤다"는 사실이 기록되게 하기 위해서다(시작 뒤에는 찍지 않는다).
 입력(build_inputs): 경기 정보, 양 팀 최근 5경기 결과, 그 경기의 배당. 모두 as_of 시점에 알려진 버전만 쓴다.
-아직 모델이 없으므로 확률은 만들지 않는다. 스냅샷은 나중에 모델을 "그때의 입력"으로 평가하는 데 쓴다.
+스냅샷을 찍을 때 활성 모델의 예측도 같은 as_of로 함께 남긴다(3d, pipelines/modeling/prospective.py).
+검증 기준을 통과하지 못한 모델의 확률은 평가용 기록일 뿐이고 표시 상태는 WITHHELD다.
+예측이 실패해도 입력 스냅샷은 그대로 저장한다.
 """
 import hashlib
 import json
@@ -101,7 +103,6 @@ def build_inputs(conn: psycopg.Connection, match_id: int, as_of: datetime) -> di
         "away_form": form(target["away_team_id"]),
         "odds": [dict(zip(("source_id", "bookmaker", "market", "line", "selection", "timing", "price", "caution"),
                           (_json_ready(value) for value in row))) for row in odds],
-        "model_status": "UNTRAINED",   # 모델이 생기기 전까지 확률은 만들지 않는다
     }
 
 
@@ -109,10 +110,21 @@ def inputs_hash(inputs: dict) -> str:
     return hashlib.sha256(json.dumps(inputs, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
+def attach_prediction(conn: psycopg.Connection, match_id: int, label: str, home: str, away: str, as_of: datetime,
+                      predictors: dict) -> str:
+    """방금 찍은 스냅샷에 모델 예측을 붙인다. 모델 모듈을 불러올 수 없어도(예: numpy 없는 이미지) 스냅샷은 지킨다."""
+    try:
+        from .modeling.prospective import record_for_snapshot
+    except ImportError:
+        return "UNAVAILABLE"
+    return record_for_snapshot(conn, match_id, label, home, away, as_of, predictors)
+
+
 def run(*, now: datetime | None = None, settings=None) -> dict:
     """해야 할 스냅샷을 찍거나 MISSED로 기록하고 건수를 돌려준다. 같은 시각에 다시 불러도 새로 기록하지 않는다(멱등)."""
     now = now or datetime.now(timezone.utc)
     counts = {"TAKEN": 0, "MISSED": 0, "upcoming_matches": 0, "recently_started_matches": 0}
+    predictors = {}   # 같은 실행(같은 as_of)에서는 모델을 한 번만 학습한다
     with connect(settings or load_settings()) as conn:
         migrate(conn)
         with conn.transaction():
@@ -134,6 +146,9 @@ def run(*, now: datetime | None = None, settings=None) -> dict:
                                         VALUES (%s, %s, %s, %s, 'TAKEN', %s, %s, %s, %s)""",
                                      (match_id, label, kickoff, due, now, Jsonb(inputs), inputs_hash(inputs), now))
                         counts["TAKEN"] += 1
+                        outcome = attach_prediction(conn, match_id, label, inputs["match"]["home"],
+                                                    inputs["match"]["away"], now, predictors)
+                        counts["PREDICTION_" + outcome] = counts.get("PREDICTION_" + outcome, 0) + 1
                     else:
                         conn.execute("""INSERT INTO snapshots.prematch_inputs
                                         (match_id, offset_label, kickoff_utc, due_at, status, recorded_at)
