@@ -7,5 +7,6 @@
 | 2a | [Kafka 기반](2a_kafka.md) | Kafka 브로커, 토픽, 이벤트 겉봉투, 생산자·소비자 설정 |
 | 2b | [football-data.org 수집기](2b_football_data_org.md) | 요청 한도·429 처리, 경기 상황에 맞춘 조회 간격, Bronze 보존, 바뀐 경우에만 발행 |
 | 2c | [Kafka 소비자 → Silver](2c_consumer.md) | 중복·늦은 도착·깨진 메시지 처리, DB 커밋 후 오프셋 커밋, Gold의 소스 우선순위 |
+| 2d | [과거 시즌 재생기](2d_replay.md) | 장애(중복·늦은 도착)를 일부러 섞어 시즌 전체를 재생하고 최종 상태를 원본과 대조 |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md)을 함께 보세요.
