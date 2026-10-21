@@ -21,7 +21,6 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -31,6 +30,7 @@ from ..config import load_settings
 from ..db import connect, migrate
 from ..object_store import client, ensure_bucket, put_if_absent
 from ..streaming import events, kafka_io
+from .rate_limit import RateLimiter  # noqa: F401 (테스트·다른 수집기가 이 이름으로도 쓴다)
 
 SOURCE_ID = "football-data-org"
 API_BASE = "https://api.football-data.org/v4"
@@ -48,40 +48,6 @@ LIVE_INTERVAL = timedelta(minutes=2)
 MATCHDAY_INTERVAL = timedelta(minutes=15)
 IDLE_INTERVAL = timedelta(hours=6)
 LIVE_STATUSES = {"IN_PLAY", "PAUSED"}
-
-
-class RateLimiter:
-    """최근 60초 안의 요청 수를 세어 한도(기본 분당 10회)를 넘지 않게 기다린다.
-
-    서버가 알려 주는 남은 횟수(X-Requests-Available-Minute)가 0이면 초기화 시각까지 기다린다.
-    clock·sleep을 바꿔 넣을 수 있어 실제로 기다리지 않고 테스트할 수 있다.
-    """
-
-    def __init__(self, max_per_minute: int = 10, clock=time.monotonic, sleep=time.sleep):
-        self.max_per_minute, self.clock, self.sleep = max_per_minute, clock, sleep
-        self.sent = deque()
-        self.blocked_until = 0.0
-
-    def wait(self) -> None:
-        """다음 요청을 보내도 될 때까지 기다린다."""
-        now = self.clock()
-        if self.blocked_until > now:
-            self.sleep(self.blocked_until - now)
-            now = self.clock()
-        while self.sent and now - self.sent[0] >= 60:
-            self.sent.popleft()
-        if len(self.sent) >= self.max_per_minute:
-            self.sleep(60 - (now - self.sent[0]))
-            now = self.clock()
-            self.sent.popleft()
-        self.sent.append(now)
-
-    def update_from_headers(self, headers) -> None:
-        """서버가 남은 요청이 0이라고 하면 초기화(X-RequestCounter-Reset초)까지 막는다."""
-        lowered = {key.lower(): value for key, value in headers.items()}
-        available, reset = lowered.get("x-requests-available-minute"), lowered.get("x-requestcounter-reset")
-        if available is not None and available.isdigit() and int(available) == 0 and reset and reset.isdigit():
-            self.blocked_until = self.clock() + int(reset)
 
 
 def fetch_json(path: str, api_key: str, limiter: RateLimiter, *, opener=urllib.request.urlopen, max_attempts: int = 3):
