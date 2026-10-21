@@ -53,7 +53,8 @@ def test_snapshot_predictions_use_only_results_received_by_as_of(season, monkeyp
         predictor = prospective.Predictor(conn, T3H)
         # 결과는 2025-08-17에 받았으므로 그 뒤 시점에는 알려져 있다. 그 전 시점에는 하나도 없다.
         early = prospective.Predictor(conn, datetime(2025, 8, 16, tzinfo=timezone.utc))
-    assert predictor.training and all(kickoff < T3H for kickoff, *_ in predictor.training)
+    assert predictor.training and all(match[0] < T3H for match in predictor.training)
+    assert all(len(match) == 7 for match in predictor.training)   # 승격 표시(3e)까지 함께 넘긴다
     assert early.training == [] and early.reasons == ["INSUFFICIENT_TRAINING_DATA(<1)"]
 
     counts = snapshots.run(now=T3H, settings=season)

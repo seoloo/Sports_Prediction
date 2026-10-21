@@ -1,4 +1,4 @@
-"""기준 모델의 시간순(walk-forward) 백테스트(로드맵 3b).
+"""기준 모델의 시간순(walk-forward) 백테스트(로드맵 3b, 3e에서 개선 모델 추가).
 
 규칙
 - 평가할 경기를 ISO 주(월~일, UTC) 단위 블록으로 나누고, 블록마다 그 블록의 첫 경기 시작 시각(fit_cutoff)에
@@ -7,6 +7,10 @@
 - 시즌 역할: 첫 시즌은 학습 전용(이전 기록이 없음), 두 번째 시즌은 검증(하이퍼파라미터 선택),
   그 뒤 시즌은 시험(선택한 설정을 고정하고 한 번만 평가). 시험 시즌 성적으로 설정을 고르지 않는다.
 - 학습 경기가 MIN_TRAINING_MATCHES보다 적으면 확률을 만들지 않고 WITHHELD로 남긴다.
+- 3e 개선 계열
+  - poisson_promoted: 승격 첫 시즌 효과를 함께 학습(후보 격자는 poisson과 같다).
+  - *_calibrated: 기준 계열에서 고른 설정에 확률 보정 계수(temperature) 하나를 더한다. 계수는 그 설정의
+    검증 시즌 예측으로 고른다(검증 안에서 고르므로 검증 성적은 약간 낙관적이고, 시험은 여전히 한 번만 평가).
 
 실행: python -m pipelines.modeling.backtest  (기록하지 않고 보기만: --no-store)
 """
@@ -24,27 +28,49 @@ from psycopg.types.json import Jsonb
 from ..config import load_settings
 from ..db import connect, migrate
 from .dataset import AVAILABILITY_LAG, load_dataset
-from .models import BaseRateModel, DixonColesModel, PoissonModel
+from .models import BaseRateModel, DixonColesModel, PoissonModel, model_from_params, promoted_by_season, sharpen
 
 MIN_TRAINING_MATCHES = 100
+# 하이퍼파라미터를 고르는 시즌(3e: 한 시즌 380경기로는 비슷한 후보 사이 차이가 잡음 수준이라 두 시즌으로 늘림).
+# 2021-22는 그동안 학습 전용이었고 시험에 쓰인 적이 없다. 이 뒤의 시즌만 시험이다.
+VALIDATION_SEASONS = ("2021-22", "2022-23")
 OUTCOMES = ("HOME", "DRAW", "AWAY")
 MODE = "HISTORICAL_RECONSTRUCTION"
 AVAILABILITY_RULE = "result known at kickoff + 3h"
 # 검증 시즌에서 고를 후보. ridge는 축소 강도, half_life_days는 오래된 경기를 잊는 속도.
 RIDGE_GRID = (1.0, 3.0, 10.0, 30.0)
 HALF_LIFE_GRID = (None, 365.0, 180.0, 90.0)
+TEMPERATURE_GRID = tuple(round(0.70 + 0.01 * step, 2) for step in range(91))   # 0.70 ~ 1.60
+CALIBRATED_FROM = {"poisson_calibrated": "poisson", "poisson_promoted_calibrated": "poisson_promoted"}
 
 
-def season_roles(rows: list[dict]) -> dict:
-    """결과가 있는 시즌을 순서대로 학습 전용·검증·시험으로 나눈다."""
+def season_roles(rows: list[dict], validation_seasons: tuple[str, ...] | None = None) -> dict:
+    """결과가 있는 시즌을 학습 전용·검증·시험으로 나눈다.
+
+    validation_seasons가 모두 자료에 있으면 그 앞은 학습 전용, 뒤는 시험이다. 시즌 자료를 앞쪽에 더해도
+    (3e: 2020-21 추가) 시험 시즌이 밀리지 않게 고정하는 용도다. 이미 설정 선택에 쓴 시즌이
+    시험으로 바뀌면 시험 결과가 낙관적이 된다. 없으면 첫 시즌 학습 전용, 두 번째 검증, 나머지 시험.
+    """
     seasons = sorted({row["season"] for row in rows if row["result"] is not None})
-    if len(seasons) < 3:
-        raise ValueError(f"시즌이 3개 이상 필요합니다(학습 전용·검증·시험): {seasons}")
-    return {"warmup": seasons[:1], "validation": seasons[1:2], "test": seasons[2:]}
+    if validation_seasons and all(season in seasons for season in validation_seasons):
+        first, last = seasons.index(validation_seasons[0]), seasons.index(validation_seasons[-1])
+    else:
+        first = last = 1
+    if first < 1 or len(seasons) < last + 2:
+        raise ValueError(f"검증 시즌 앞뒤로 시즌이 하나 이상 필요합니다(학습 전용·검증·시험): {seasons}")
+    return {"warmup": seasons[:first], "validation": seasons[first:last + 1], "test": seasons[last + 1:]}
+
+
+def mark_promoted(rows: list[dict]) -> list[dict]:
+    """경기마다 홈·원정 팀이 그 시즌 승격 팀인지(home_new, away_new)를 붙인 복사본."""
+    promoted = promoted_by_season((row["season"], row["home_team"], row["away_team"]) for row in rows)
+    return [{**row, "home_new": row["home_team"] in promoted.get(row["season"], set()),
+             "away_new": row["away_team"] in promoted.get(row["season"], set())} for row in rows]
 
 
 def training_tuple(row: dict) -> tuple:
-    return row["kickoff_utc"], row["home_team"], row["away_team"], row["ft_home"], row["ft_away"]
+    return (row["kickoff_utc"], row["home_team"], row["away_team"], row["ft_home"], row["ft_away"],
+            row.get("home_new", False), row.get("away_new", False))
 
 
 def blocks(targets: list[dict]) -> list[tuple[datetime, list[dict]]]:
@@ -74,7 +100,8 @@ def walk_forward(rows: list[dict], make_model, eval_seasons: list[str]) -> list[
             if model is None:
                 prediction["withheld_reason"] = f"INSUFFICIENT_TRAINING_DATA(<{MIN_TRAINING_MATCHES})"
             else:
-                prediction["probabilities"] = model.predict(row["home_team"], row["away_team"])
+                prediction["probabilities"] = model.predict(row["home_team"], row["away_team"],
+                                                            row.get("home_new", False), row.get("away_new", False))
             predictions.append(prediction)
     return predictions
 
@@ -166,15 +193,39 @@ def candidates() -> dict:
         "poisson": [lambda r=r, h=h: PoissonModel(ridge=r, half_life_days=h) for r in RIDGE_GRID for h in HALF_LIFE_GRID],
         "dixon_coles": [lambda r=r, h=h: DixonColesModel(ridge=r, half_life_days=h)
                         for r in RIDGE_GRID for h in HALF_LIFE_GRID],
+        "poisson_promoted": [lambda r=r, h=h: PoissonModel(name="poisson_promoted", ridge=r, half_life_days=h,
+                                                           promoted_effect=True)
+                             for r in RIDGE_GRID for h in HALF_LIFE_GRID],
     }
+
+
+def fit_temperature(predictions: list[dict]) -> float:
+    """검증 예측의 로그 손실이 가장 낮아지는 보정 계수. 1이면 보정하지 않는 것과 같다."""
+    scored = [item for item in predictions if item["probabilities"] is not None]
+    if not scored:
+        return 1.0
+    losses = {temperature: sum(log_loss(sharpen(item["probabilities"], temperature), item["result"]) for item in scored)
+              for temperature in TEMPERATURE_GRID}
+    return min(losses, key=lambda temperature: (losses[temperature], abs(temperature - 1)))
 
 
 def run(rows: list[dict], conn: psycopg.Connection | None = None) -> dict:
     """검증 시즌에서 계열별 최선의 설정을 고르고, 그 설정만 시험 시즌에 한 번 평가한다. conn이 있으면 기록한다."""
-    roles = season_roles(rows)
+    roles = season_roles(rows, VALIDATION_SEASONS)
+    rows = mark_promoted(rows)
     rows_by_id = {row["match_id"]: row for row in rows}
     data_hash = dataset_hash(rows)
     report = {"seasons": roles, "dataset_hash": data_hash, "validation": {}, "test": {}}
+    chosen = {}   # 계열 → (만드는 함수, 검증 예측)
+
+    def test_once(family, make_model, version):
+        predictions = walk_forward(rows, make_model, roles["test"])
+        summary = summarize(predictions, rows_by_id)
+        if conn is not None:
+            run_id, created = store_run(conn, make_model(), "TEST", roles["test"], data_hash, summary, predictions)
+            summary["run_id"], summary["newly_stored"] = run_id, created
+        report["test"][family] = {"model_version": version, **summary}
+
     for family, makers in candidates().items():
         tried = []
         for make_model in makers:
@@ -183,15 +234,29 @@ def run(rows: list[dict], conn: psycopg.Connection | None = None) -> dict:
             model = make_model()
             if conn is not None:
                 store_run(conn, model, "VALIDATION", roles["validation"], data_hash, summary, predictions)
-            tried.append((summary["overall"].get("log_loss", math.inf), model.version, make_model))
-        best_loss, best_version, best_maker = min(tried, key=lambda item: item[0])
+            tried.append((summary["overall"].get("log_loss", math.inf), model.version, make_model, predictions))
+        best_loss, best_version, best_maker, best_predictions = min(tried, key=lambda item: item[0])
+        chosen[family] = (best_maker, best_predictions)
         report["validation"][family] = {"tried": len(tried), "chosen": best_version, "log_loss": best_loss}
-        predictions = walk_forward(rows, best_maker, roles["test"])
-        summary = summarize(predictions, rows_by_id)
+        test_once(family, best_maker, best_version)
+
+    for family, base in CALIBRATED_FROM.items():
+        base_maker, base_predictions = chosen[base]
+        temperature = fit_temperature(base_predictions)
+        params = {**base_maker().params, "temperature": temperature}
+
+        def make_model(family=family, params=params):
+            return model_from_params(family, params)
+
+        calibrated = [{**item, "probabilities": sharpen(item["probabilities"], temperature)} if item["probabilities"]
+                      else item for item in base_predictions]
+        summary = summarize(calibrated, rows_by_id)
         if conn is not None:
-            run_id, created = store_run(conn, best_maker(), "TEST", roles["test"], data_hash, summary, predictions)
-            summary["run_id"], summary["newly_stored"] = run_id, created
-        report["test"][family] = {"model_version": best_version, **summary}
+            store_run(conn, make_model(), "VALIDATION", roles["validation"], data_hash, summary, calibrated)
+        version = make_model().version
+        report["validation"][family] = {"tried": len(TEMPERATURE_GRID), "chosen": version, "temperature": temperature,
+                                        "log_loss": summary["overall"].get("log_loss")}
+        test_once(family, make_model, version)
     return report
 
 

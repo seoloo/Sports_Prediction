@@ -77,6 +77,31 @@ def test_withheld_without_enough_training_data():
     assert summary["overall"] == {"matches": 12, "withheld": 12}
 
 
+def test_fixed_validation_seasons_do_not_shift_when_older_data_is_added():
+    rows = synthetic_rows(("2020-21", "2021-22", "2022-23", "2023-24", "2024-25"))
+    assert backtest.season_roles(rows, ("2021-22", "2022-23")) == {
+        "warmup": ["2020-21"], "validation": ["2021-22", "2022-23"], "test": ["2023-24", "2024-25"]}
+    with pytest.raises(ValueError):   # 학습 전용 시즌이 없으면 안 된다
+        backtest.season_roles(synthetic_rows(("2021-22", "2022-23", "2023-24")), ("2021-22", "2022-23"))
+
+
+def test_fit_temperature_sharpens_underconfident_predictions():
+    # 실제로는 70% 맞히는데 50%라고 말하는 예측 → 1보다 큰 보정 계수
+    items = [{"probabilities": (0.5, 0.25, 0.25), "result": "HOME" if i % 10 < 7 else "AWAY"} for i in range(200)]
+    assert backtest.fit_temperature(items) > 1.2
+    calibrated = [{"probabilities": (0.5, 0.25, 0.25), "result": "HOME" if i % 4 < 2 else ("DRAW" if i % 4 == 2 else "AWAY")}
+                  for i in range(200)]
+    assert backtest.fit_temperature(calibrated) == 1.0
+
+
+def test_mark_promoted_flags_newcomers_per_season():
+    rows = synthetic_rows(("2021-22", "2022-23"))
+    rows += [{**rows[-1], "match_id": 999, "home_team": "Z"}]   # 2022-23에 처음 나온 팀
+    marked = {row["match_id"]: row for row in backtest.mark_promoted(rows)}
+    assert marked[999]["home_new"] is True and marked[999]["away_new"] is False
+    assert not any(row["home_new"] or row["away_new"] for row in marked.values() if row["season"] == "2021-22")
+
+
 def test_season_roles_keep_test_seasons_out_of_selection():
     assert backtest.season_roles(synthetic_rows(("2020-21", "2021-22", "2022-23", "2023-24"))) == {
         "warmup": ["2020-21"], "validation": ["2021-22"], "test": ["2022-23", "2023-24"]}
@@ -108,12 +133,18 @@ def test_dataset_hash_changes_when_a_result_changes():
 
 def test_run_selects_on_validation_and_tests_once(monkeypatch):
     monkeypatch.setattr(backtest, "MIN_TRAINING_MATCHES", 5)
+    monkeypatch.setattr(backtest, "VALIDATION_SEASONS", ("2022-23",))
     monkeypatch.setattr(backtest, "RIDGE_GRID", (1.0, 10.0))
     monkeypatch.setattr(backtest, "HALF_LIFE_GRID", (None,))
     report = backtest.run(synthetic_rows())
     assert report["validation"]["poisson"]["tried"] == 2 and report["validation"]["base_rate"]["tried"] == 1
     assert set(report["test"]["poisson"]["by_season"]) == {"2023-24"}
     assert report["test"]["poisson"]["model_version"] == report["validation"]["poisson"]["chosen"]
+    # 보정 계열은 기준 계열에서 고른 설정 + 검증 예측으로 고른 보정 계수
+    calibrated = report["validation"]["poisson_calibrated"]
+    assert calibrated["chosen"].startswith("poisson_calibrated|") and 0.7 <= calibrated["temperature"] <= 1.6
+    assert set(report["test"]) == {"base_rate", "poisson", "dixon_coles", "poisson_promoted", "poisson_calibrated",
+                                   "poisson_promoted_calibrated"}
 
 
 @pytest.fixture
@@ -141,7 +172,7 @@ def test_store_run_is_idempotent_and_immutable(stored):
     assert first[1] is True and again == (first[0], False) and other_data[1] is True
     assert query(s, "SELECT count(*) FROM modeling.backtest_predictions")[0][0] == 2
     assert query(s, "SELECT model_version, params->>'ridge' FROM modeling.backtest_runs WHERE run_id = %s",
-                 (first[0],))[0] == ("poisson|3b.1|ridge=10|half_life_days=180", "10")
+                 (first[0],))[0] == ("poisson|3e.1|ridge=10|half_life_days=180", "10")
     with pytest.raises(psycopg.Error):
         query(s, "UPDATE modeling.backtest_predictions SET prob_home = 0.9")
 

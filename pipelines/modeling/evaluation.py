@@ -33,7 +33,10 @@ EARLY_MATCHES = 10               # "시즌 초반" = 팀의 그 시즌 첫 10경
 # 검증 기준(제안값). 바꾸면 METHOD가 바뀌어 새 보고서로 저장된다.
 GATE = {"max_ece": 0.03, "must_beat": "market_pre"}
 METHOD = {"bootstrap_samples": BOOTSTRAP_SAMPLES, "seed": BOOTSTRAP_SEED, "block": "fit_cutoff (ISO week)",
-          "calibration_edges": CALIBRATION_EDGES, "early_matches": EARLY_MATCHES, "gate": GATE, "version": "3c.2"}
+          "calibration_edges": CALIBRATION_EDGES, "early_matches": EARLY_MATCHES, "gate": GATE, "version": "3c.3"}
+# 비교할 짝(왼쪽 − 오른쪽). 3e 개선 모델은 같은 설정의 기존 Poisson과 비교해 각 개선의 효과만 본다.
+COMPARISONS = (("poisson", "base_rate"), ("dixon_coles", "poisson"), ("poisson_promoted", "poisson"),
+               ("poisson_calibrated", "poisson"), ("poisson_promoted_calibrated", "poisson"))
 TIMING_LABELS = {"market_pre": "시장 마감 전 배당", "market_close": "시장 마감 배당"}
 
 
@@ -217,7 +220,7 @@ def evaluate(predictions: dict, runs: dict, season_teams: dict) -> dict:
         report["models"][name] = model_report
     reference = next(iter(predictions.values()))
     report["market_close_calibration"] = calibration(reference, lambda item: item["market_close"])
-    for left, right in (("poisson", "base_rate"), ("dixon_coles", "poisson"), ("dixon_coles", "base_rate")):
+    for left, right in COMPARISONS:
         if left in by_match and right in by_match:
             report["comparisons"][f"{left}_vs_{right}"] = compare(
                 predictions[left], lambda i: i["probabilities"],
@@ -241,7 +244,9 @@ def store_report(conn: psycopg.Connection, report: dict) -> tuple[int, bool]:
                             (run_ids, method_hash)).fetchone()[0], False
 
 
-LABELS = {"base_rate": "단순 비율", "poisson": "Poisson", "dixon_coles": "Dixon-Coles"}
+LABELS = {"base_rate": "단순 비율", "poisson": "Poisson", "dixon_coles": "Dixon-Coles",
+          "poisson_promoted": "Poisson+승격 효과", "poisson_calibrated": "Poisson+보정",
+          "poisson_promoted_calibrated": "Poisson+승격 효과+보정"}
 OUTCOME_LABELS = {"HOME": "홈 승", "DRAW": "무승부", "AWAY": "원정 승"}
 
 
@@ -277,7 +282,7 @@ def render_markdown(report: dict) -> str:
     lines += ["| 대상 | " + " | ".join(f"{OUTCOME_LABELS[o]} ECE" for o in OUTCOMES) + " |", "|---|---|---|---|"]
     for label, result in calibrated.items():
         lines.append(f"| {label} | " + " | ".join(f"{result[o]['ece']:.4f}" for o in OUTCOMES) + " |")
-    for name in ("dixon_coles", "poisson"):
+    for name in ("poisson_calibrated", "dixon_coles", "poisson"):
         if name not in report["models"]:
             continue
         lines += ["", f"### {LABELS[name]} 구간별", "", "| 결과 | 예측 구간 | 경기 | 평균 예측 | 실제 [95%] | |", "|---|---|---|---|---|---|"]

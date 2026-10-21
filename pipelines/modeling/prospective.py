@@ -23,9 +23,7 @@ from ..config import load_settings
 from ..db import connect, migrate
 from ..snapshots import KNOWN_FIXTURES_SQL
 from .backtest import OUTCOMES, brier, log_loss
-from .models import BaseRateModel, DixonColesModel, PoissonModel
-
-MODEL_CLASSES = {"base_rate": BaseRateModel, "poisson": PoissonModel, "dixon_coles": DixonColesModel}
+from .models import model_from_params, promoted_by_season
 MIN_TRAINING_MATCHES = 100
 MIN_TEAM_HISTORY = 5          # 한 팀의 학습 경기가 이보다 적으면(승격 팀 시즌 초 등) 사유를 하나 더 붙인다
 MODE = "PROSPECTIVE"
@@ -61,10 +59,7 @@ def active_model(conn: psycopg.Connection) -> dict | None:
 
 def build_model(active: dict):
     """활성 모델 정보로 같은 설정의 모델을 만든다. 코드가 바뀌어 버전이 다르면 None(평가받지 않은 코드)."""
-    model_class = MODEL_CLASSES[active["name"]]
-    params = active["params"]
-    model = model_class() if active["name"] == "base_rate" else model_class(
-        ridge=params["ridge"], half_life_days=params["half_life_days"])
+    model = model_from_params(active["name"], active["params"])
     return model if model.version == active["model_version"] else None
 
 
@@ -75,13 +70,18 @@ class Predictor:
         self.as_of = as_of
         self.active = active_model(conn)
         self.model, self.reasons = None, []
-        finished = sorted((row for row in known_fixtures(conn, as_of)
+        fixtures = known_fixtures(conn, as_of)
+        # 시즌별 승격 팀(3e). 시즌 참가 팀은 일정이 나올 때 이미 알려진다.
+        self.promoted = promoted_by_season((row["season"], row["home"], row["away"]) for row in fixtures)
+        finished = sorted((row for row in fixtures
                            if row["status"] == "FINISHED" and row["kickoff_utc"] is not None
                            and row["kickoff_utc"] < as_of and row["ft_home"] is not None),
                           key=lambda row: (row["kickoff_utc"], row["match_id"]))
-        self.training = [(row["kickoff_utc"], row["home"], row["away"], row["ft_home"], row["ft_away"]) for row in finished]
+        self.training = [(row["kickoff_utc"], row["home"], row["away"], row["ft_home"], row["ft_away"],
+                          self.is_promoted(row["home"], row["season"]), self.is_promoted(row["away"], row["season"]))
+                         for row in finished]
         self.training_hash = hashlib.sha256(repr([(r[0].isoformat(), *r[1:]) for r in self.training]).encode()).hexdigest()
-        self.history = Counter(team for _, home, away, _, _ in self.training for team in (home, away))
+        self.history = Counter(team for match in self.training for team in (match[1], match[2]))
         if self.active is None:
             self.reasons.append("NO_ACTIVE_MODEL")
         elif (model := build_model(self.active)) is None:
@@ -91,10 +91,14 @@ class Predictor:
         else:
             self.model = model.fit(self.training, as_of)
 
-    def predict(self, home: str, away: str) -> dict:
+    def is_promoted(self, team: str, season: str | None) -> bool:
+        return team in self.promoted.get(season, set())
+
+    def predict(self, home: str, away: str, season: str | None = None) -> dict:
         """저장할 예측 한 행. 확률은 모델이 있을 때만, 표시 상태는 검증 기준과 자료 부족 여부로 정한다."""
         reasons = list(self.reasons)
-        probabilities = self.model.predict(home, away) if self.model else None
+        probabilities = (self.model.predict(home, away, self.is_promoted(home, season), self.is_promoted(away, season))
+                         if self.model else None)
         if self.active and self.active["gate_status"] != "VALIDATED":
             reasons.append("MODEL_NOT_VALIDATED")
         if min(self.history[home], self.history[away]) < MIN_TEAM_HISTORY:
@@ -124,13 +128,13 @@ def insert_prediction(conn: psycopg.Connection, match_id: int, offset_label: str
 
 
 def record_for_snapshot(conn: psycopg.Connection, match_id: int, offset_label: str, home: str, away: str,
-                        as_of: datetime, cache: dict) -> str:
+                        as_of: datetime, cache: dict, season: str | None = None) -> str:
     """방금 찍은 스냅샷에 모델 예측을 붙인다. 예측이 실패해도 스냅샷은 지키고 실패 사유를 WITHHELD로 남긴다."""
     try:
         with conn.transaction():   # 저장점: 실패하면 이 예측만 취소
             if as_of not in cache:
                 cache[as_of] = Predictor(conn, as_of)
-            row = cache[as_of].predict(home, away)
+            row = cache[as_of].predict(home, away, season)
             insert_prediction(conn, match_id, offset_label, as_of, row)
             return row["display_status"]
     except Exception as exc:   # noqa: BLE001 (예측 실패가 입력 스냅샷까지 잃게 하지 않는다)

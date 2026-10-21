@@ -110,14 +110,15 @@ def inputs_hash(inputs: dict) -> str:
     return hashlib.sha256(json.dumps(inputs, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
-def attach_prediction(conn: psycopg.Connection, match_id: int, label: str, home: str, away: str, as_of: datetime,
+def attach_prediction(conn: psycopg.Connection, match_id: int, label: str, match: dict, as_of: datetime,
                       predictors: dict) -> str:
     """방금 찍은 스냅샷에 모델 예측을 붙인다. 모델 모듈을 불러올 수 없어도(예: numpy 없는 이미지) 스냅샷은 지킨다."""
     try:
         from .modeling.prospective import record_for_snapshot
     except ImportError:
         return "UNAVAILABLE"
-    return record_for_snapshot(conn, match_id, label, home, away, as_of, predictors)
+    return record_for_snapshot(conn, match_id, label, match["home"], match["away"], as_of, predictors,
+                               season=match["season"])
 
 
 def run(*, now: datetime | None = None, settings=None) -> dict:
@@ -146,8 +147,7 @@ def run(*, now: datetime | None = None, settings=None) -> dict:
                                         VALUES (%s, %s, %s, %s, 'TAKEN', %s, %s, %s, %s)""",
                                      (match_id, label, kickoff, due, now, Jsonb(inputs), inputs_hash(inputs), now))
                         counts["TAKEN"] += 1
-                        outcome = attach_prediction(conn, match_id, label, inputs["match"]["home"],
-                                                    inputs["match"]["away"], now, predictors)
+                        outcome = attach_prediction(conn, match_id, label, inputs["match"], now, predictors)
                         counts["PREDICTION_" + outcome] = counts.get("PREDICTION_" + outcome, 0) + 1
                     else:
                         conn.execute("""INSERT INTO snapshots.prematch_inputs

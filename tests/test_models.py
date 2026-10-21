@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import pytest
 
-from pipelines.modeling.models import BaseRateModel, DixonColesModel, PoissonModel
+from pipelines.modeling.models import (CODE_VERSION, BaseRateModel, DixonColesModel, PoissonModel, model_from_params,
+                                       promoted_by_season, sharpen)
 
 AS_OF = datetime(2025, 6, 1, tzinfo=timezone.utc)
 TRUE_ATTACK = {"A": 0.4, "B": 0.2, "C": 0.0, "D": -0.1, "E": -0.2, "F": -0.3}
@@ -78,9 +79,65 @@ def test_probabilities_are_valid(model):
     for home, away in [("A", "F"), ("F", "A"), ("C", "Unknown FC")]:
         probabilities = model.predict(home, away)
         assert all(p > 0 for p in probabilities) and sum(probabilities) == pytest.approx(1, abs=1e-9)
-    assert model.version.startswith(model.name + "|3b.")
+    assert model.version.startswith(f"{model.name}|{CODE_VERSION}|")
 
 
 def test_base_rate_counts_outcomes_with_smoothing():
     matches = [(AS_OF, "A", "B", 2, 0)] * 5 + [(AS_OF, "A", "B", 1, 1)] * 2 + [(AS_OF, "A", "B", 0, 1)]
     assert BaseRateModel().fit(matches, AS_OF).predict("X", "Y") == pytest.approx((6 / 11, 3 / 11, 2 / 11))
+
+
+def promoted_league(seed: int = 3) -> list[tuple]:
+    """매 시즌 승격 팀 P1·P2가 실제로 약한(공격 −0.4, 수비 −0.3) 가상 리그. 승격 표시를 붙인 학습 경기."""
+    rng = np.random.default_rng(seed)
+    truth = PoissonModel(ridge=0, half_life_days=None)
+    truth.mu, truth.home_advantage = MU, HOME
+    truth.attack = {team: 0.0 for team in ("A", "B", "C", "D", "P1", "P2")}
+    truth.defence = dict(truth.attack)
+    truth.attack.update(P1=-0.4, P2=-0.4)
+    truth.defence.update(P1=-0.3, P2=-0.3)
+    matches, day = [], 0
+    for _ in range(40):
+        for home in truth.attack:
+            for away in truth.attack:
+                if home == away:
+                    continue
+                matrix = truth.score_matrix(home, away)
+                flat = rng.choice(matrix.size, p=(matrix / matrix.sum()).ravel())
+                day += 1
+                matches.append((AS_OF - timedelta(days=day), home, away, *divmod(int(flat), matrix.shape[1]),
+                                home.startswith("P"), away.startswith("P")))
+    return matches
+
+
+def test_promoted_effect_learns_that_promoted_teams_are_weaker():
+    matches = promoted_league()
+    # 승격 팀의 개별 기록은 빼고 학습해, "기록 없는 새 승격 팀"을 승격 계수만으로 예측하게 한다.
+    training = [match for match in matches if not (match[5] and match[6])]
+    model = PoissonModel(ridge=1e6, half_life_days=None, promoted_effect=True).fit(training, AS_OF)
+    assert model.promoted_attack < -0.25 and model.promoted_defence < -0.15
+    newcomer = model.predict("New FC", "A", home_new=True)[0]
+    assert newcomer < PoissonModel(ridge=1e6, half_life_days=None).fit(training, AS_OF).predict("New FC", "A")[0]
+    # 승격 효과를 끈 모델은 표시를 받아도 무시한다.
+    plain = PoissonModel(ridge=3, half_life_days=None).fit(matches, AS_OF)
+    assert plain.predict("P1", "A", home_new=True) == plain.predict("P1", "A")
+
+
+def test_sharpen_spreads_or_flattens_probabilities():
+    assert sharpen((0.5, 0.3, 0.2), 1.0) == (0.5, 0.3, 0.2)
+    sharper, flatter = sharpen((0.5, 0.3, 0.2), 1.5), sharpen((0.5, 0.3, 0.2), 0.5)
+    assert sharper[0] > 0.5 > flatter[0] and sum(sharper) == pytest.approx(1) and sum(flatter) == pytest.approx(1)
+
+
+def test_model_from_params_rebuilds_the_same_version():
+    for model in (BaseRateModel(), PoissonModel(ridge=10.0, half_life_days=180.0),
+                  PoissonModel(name="poisson_promoted_calibrated", ridge=10.0, half_life_days=180.0,
+                               promoted_effect=True, temperature=1.04),
+                  DixonColesModel(ridge=3.0, half_life_days=None)):
+        assert model_from_params(model.name, model.params).version == model.version
+    assert PoissonModel(ridge=10.0, half_life_days=180.0).params == {"ridge": 10.0, "half_life_days": 180.0}
+
+
+def test_promoted_by_season_compares_with_the_previous_season():
+    fixtures = [("2020-21", "A", "B"), ("2020-21", "C", "D"), ("2021-22", "A", "B"), ("2021-22", "C", "E")]
+    assert promoted_by_season(fixtures) == {"2020-21": set(), "2021-22": {"E"}}
