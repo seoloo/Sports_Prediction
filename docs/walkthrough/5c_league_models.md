@@ -70,6 +70,20 @@ EPL에서 쓰던 백테스트·평가·검증 기준을 다섯 리그에 똑같�
 | (보강) `test_league_table_is_consistent` | 다섯 리그 모두 모델 대상 |
 | (보강) `test_unmodeled_league_is_withheld_without_probabilities` | 목록 밖 리그(예: 프랑스)는 `LEAGUE_NOT_MODELED` |
 
+## 사용한 기술
+
+| 기술 | 어디에 | 어떻게 썼나 |
+|---|---|---|
+| numpy 직접 구현 모델 | `pipelines/modeling/models.py` | Poisson(ridge 정규화 IRLS, 시간 감쇠 가중치), Dixon-Coles(저득점 보정 rho). 리그마다 따로 학습 |
+| 시간순 walk-forward 백테스트 | `pipelines/modeling/backtest.py` | 주 단위로 그 시점까지 알려진 경기로만 다시 학습하고 다음 주를 예측(검증 2시즌으로 설정 선택, 시험 시즌은 한 번만) |
+| 격자 탐색 | `backtest` 설정 후보 | ridge·반감기·휴식 효과·확률 보정 후보를 검증 시즌 로그 손실로 비교 |
+| 블록 부트스트랩(ISO 주 단위) | `pipelines/modeling/evaluation.py` | 같은 주 경기끼리 묶어 다시 뽑아 95% 구간을 계산(같은 주 경기의 상관을 무시하지 않음) |
+| ECE(확률 보정 오차), Wilson 구간 | `evaluation` | 예측 확률과 실제 빈도의 차이, 작은 표본 비율의 구간 |
+| Postgres 제약으로 실행 구분 | `pipelines/sql/012_league_models.sql` | `UNIQUE(competition_code, model_version, purpose, eval_seasons, dataset_hash)`로 같은 실행을 두 번 저장하지 않고 리그끼리 섞이지 않게 함 |
+| psycopg 배열 파라미터 | `load_test_predictions` | `%s::bigint[]`로 실행 ID 목록을 한 번에 조회(형 추론 오류를 명시 형변환으로 해결) |
+| Markdown 보고서 생성 | `evaluation.main --markdown-dir` | 리그별 보고서를 코드로 만들어 `docs/reports/`에 저장(손으로 옮기지 않음) |
+| 시점 조회 함수 | `prospective.Predictor` | 경기 전 예측은 `silver.*_known_at(as_of)`로 그 순간 알려진 그 리그 경기만으로 학습 |
+
 ## 면접에서 나올 만한 질문
 
 **Q. 리그를 섞어서 한 모델로 학습하면 안 되나요?**

@@ -63,6 +63,20 @@ The Odds API 키는 크레딧이 들지 않는 리그 목록 조회로 확인했
 | `test_unmodeled_league_is_withheld_without_probabilities` | 모델 없는 리그는 확률 없이 `LEAGUE_NOT_MODELED` 하나만, EPL은 기존 사유 |
 | (보강) `test_dataset_values_and_independent_check` | 데이터셋을 리그로 거를 수 있음 |
 
+## 사용한 기술
+
+| 기술 | 어디에 | 어떻게 썼나 |
+|---|---|---|
+| Python `NamedTuple`(불변 설정 객체) | `pipelines/leagues.py` | 리그 하나를 `League(code, name, fdorg, odds_api, couk, timezone)`로 정의하고 목록 하나에서 소스별 사전(`BY_FDORG` 등)을 만든다. 리그를 더할 때 고칠 곳이 한 줄 |
+| `zoneinfo`(IANA 시간대) | `openfootball.LEAGUE_TIMEZONES` | 시간대 표기가 없는 현지 시각을 리그 시간대로 UTC 변환하고 `timezone_assumed=true`를 남김 |
+| 슬라이딩 윈도 요청 제한(`collections.deque`) | `football_data_org.RateLimiter` | 최근 60초 요청 시각을 큐에 두고, 다섯 대회를 돌아도 수집기 전체가 분당 10회를 넘지 않음. 대회별 다음 조회 시각을 사전으로 따로 관리 |
+| Airflow 동적 작업 매핑(`expand`) + `max_active_tis_per_dag` | `dags/openfootball_epl_daily.py` | (리그, 시즌) 10개 대상을 실행 시점에 작업으로 펼치고, GitHub 요청이 몰리지 않게 동시 2개로 제한 |
+| Kafka 소비자 재시작(설정 다시 읽기) | `stream-consumer` | 팀 대조표는 시작할 때 읽으므로, 대조표 추가 → 소비자 재시작 → 수집기 재시작 순서로 반영 |
+| CSV 대조표 + 근거 검증 SQL | `pipelines/mappings/team_aliases.csv` | 같은 날짜(±1일) 경기 일치율 90% 이상인 이름만 등록, 한 이름에 ID 두 개가 겹치지 않는지 확인 |
+| dbt 테스트 | `dbt/models/gold/schema.yml` | 순위표 정합성(승점 = 3×승+무 등)이 리그가 늘어도 그대로 통과하는지 확인(PASS=34) |
+| Spark 대조 | `pipelines/lake/reconcile.py` | 다섯 리그 11,416경기 × 18열을 dbt와 행 단위로 대조, 불일치 0 |
+| pytest `monkeypatch` | `tests/test_leagues.py` | 실제 API 없이 수집기 반복을 확인하고, 한 리그가 실패해도 나머지를 조회하는지 시험 |
+
 ## 면접에서 나올 만한 질문
 
 **Q. 리그를 늘릴 때 무엇이 가장 위험했나요?**

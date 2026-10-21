@@ -66,6 +66,20 @@ prematch_snapshots DAG(30분마다)
 | `test_run_due_fetches_only_due_leagues_and_versions_changes` | 곧 스냅샷이 오는 리그만 1크레딧, 90분 안에 다시 안 받음, 모르는 팀은 품질 문제, 키가 결과에 없음 |
 | `test_run_due_without_key_is_not_configured` | 키가 없으면 실제 API를 부르지 않음 |
 
+## 사용한 기술
+
+| 기술 | 어디에 | 어떻게 썼나 |
+|---|---|---|
+| REST API + `urllib.request`(표준 라이브러리) | `the_odds_api.call` | `/sports/{리그}/events`(무료)로 일정을 먼저 보고 필요할 때만 `/odds`(1크레딧). 외부 HTTP 라이브러리 없이 시간 제한·오류 처리 |
+| 응답 헤더로 예산 관리 | `x-requests-remaining`, `RESERVE_CREDITS` | 남은 크레딧이 60 아래면 1시간 전 스냅샷만 받도록 자동 축소 |
+| Bronze 내용 해시 저장(SeaweedFS S3 + boto3) | `object_store.put_if_absent` | 받은 JSON을 바이트 그대로 `sha256=…` 경로에 한 번만 저장 |
+| Postgres 임시 테이블 + `COPY` + 집합 SQL | `write_odds` → `silver.odds_revisions` | `COPY`로 임시 테이블에 넣고 SQL 한 번으로 "값이 바뀐 배당만 새 버전"을 추가. `published_at` = 북메이커 `last_update` |
+| SQL 마이그레이션 | `pipelines/sql/011_the_odds_api.sql` | 소스 검토 결과(`ingest.sources`)를 데이터로 기록 |
+| 문자열 유사도(`difflib.SequenceMatcher`) | `suggest_aliases` | 시작 시각이 같은 경기 중 이름이 가장 비슷한 쪽으로 대조표 후보를 만들고, 0.75 미만은 사람이 확인 |
+| Airflow `trigger_rule="all_done"`, `retries=0` | `dags/prematch_snapshots.py` | 배당 수집이 실패해도 스냅샷은 찍고, 재시도로 크레딧을 쓰지 않음 |
+| 비밀값 보호(`raise … from None`) | `the_odds_api.call` | URL 쿼리에 든 API 키가 예외 메시지·로그에 남지 않게 원래 예외를 끊음 |
+| pytest 가짜 opener | `tests/test_the_odds_api.py` | 네트워크 없이 크레딧 계산·시점 판단·키 제거를 시험 |
+
 ## 면접에서 나올 만한 질문
 
 **Q. 무료 API 한도 안에서 어떻게 운영하나요?**
