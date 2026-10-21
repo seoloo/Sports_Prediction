@@ -56,15 +56,15 @@
 
 | 테이블 | 행 | 내용 |
 |---|---|---|
-| `silver.teams` | 152 | 기준 팀(openfootball 이름) |
+| `silver.teams` | 182 | 기준 팀(축구 152: openfootball 이름, 농구 30: balldontlie 이름, `sport` 열로 구분) |
 | `silver.team_aliases` | 277 | 소스별 팀 이름·ID → 기준 팀(검토한 대조표) |
 | `silver.matches` | 12,264 | 경기의 변하지 않는 정체성(리그·시즌·홈·원정) |
 | `silver.match_revisions` | 12,264 | openfootball 경기 내용(일정·점수)의 버전 |
 | `silver.live_match_revisions` | 1,752 | football-data.org 경기 상태·점수의 버전(published_at = API 갱신 시각) |
 | `silver.match_stats_revisions` | 1,969 | 경기 기록(슈팅·유효 슈팅·퇴장)의 버전(co.uk, 3g) |
 | `silver.odds_revisions` | 166,589 | 배당의 버전(북메이커 × 시장 × 선택지 × 시점) |
-| `silver.games` | 0(키 대기) | NBA 경기의 정체성(소스 경기 ID). 같은 대진이 여러 번 열려 축구 `matches`와 분리(5d) |
-| `silver.game_revisions` | 0(키 대기) | NBA 일정·상태·점수의 버전. 무승부 없음을 CHECK로 강제 |
+| `silver.games` | 11,429 | NBA 경기의 정체성(소스 경기 ID). 같은 대진이 여러 번 열려 축구 `matches`와 분리(5d) |
+| `silver.game_revisions` | 11,431 | NBA 일정·상태·점수의 버전. 무승부 없음을 CHECK로 강제 |
 | `silver.quality_issues` | 2 | 수집 단계에서 걸러낸 레코드와 사유 |
 | `silver.stream_rejections` | 0 | 스트리밍에서 반영하지 않은 이벤트와 사유 |
 

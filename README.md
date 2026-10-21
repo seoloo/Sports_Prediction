@@ -59,7 +59,7 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | 5a | 다섯 리그 일정·결과 수집, 팀 대조표 | [5a](docs/walkthrough/5a_multi_league.md) |
 | 5b | The Odds API 해외 배당 자동 수집(경기 24·1시간 전, Pinnacle 우선) | [5b](docs/walkthrough/5b_odds_api.md) |
 | 5c | 리그별 백테스트·평가·활성 모델 | [5c](docs/walkthrough/5c_league_models.md) |
-| 5d-a | NBA 경기 수집기(balldontlie, 축구와 분리한 경기 테이블, 매일 DAG). 키를 받으면 실제 수집 | [5d-a](docs/walkthrough/5d_nba_games.md) |
+| 5d-a | NBA 경기 수집(balldontlie, 2018-19~ 아홉 시즌 11,429경기, 축구와 분리한 경기 테이블, 매일 DAG) | [5d-a](docs/walkthrough/5d_nba_games.md) |
 
 평가 결과(시험 시즌 2023-24 이후, 로그 손실이 낮을수록 좋음):
 
@@ -124,7 +124,7 @@ docker compose --env-file .env -f infra/docker-compose.yml exec airflow cat /opt
 | `openfootball_epl_daily` | 매일 06:00 UTC | 다섯 리그 × 이전·현재 시즌 수집 → dbt build → Spark 대조 |
 | `prematch_snapshots` | 30분마다 | 경기 24·1시간 전 해외 배당 수집 → 24·3·1시간 전 스냅샷·예측 기록·배당 가치 → 텔레그램 |
 | `weekly_model_report` | 화요일 06:00 UTC | 경기 후 채점, 주간 보고서, 텔레그램 |
-| `balldontlie_nba_daily` | 매일 12:00 UTC | NBA 현재 시즌 일정·결과(키가 없으면 `NOT_CONFIGURED`로 끝남) |
+| `balldontlie_nba_daily` | 매일 12:00 UTC | NBA 현재 시즌 일정·결과(바뀐 경기만 새 버전) |
 
 PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 텔레그램으로 알립니다.
 
@@ -132,7 +132,7 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 
 | 하고 싶은 일 | 명령 |
 |---|---|
-| NBA 시즌 수집(키 필요) | `.\.venv\Scripts\python.exe -m pipelines.ingest.balldontlie --season 2025-26` |
+| NBA 시즌 다시 받기 | `.\.venv\Scripts\python.exe -m pipelines.ingest.balldontlie --season 2025-26` |
 | 리그 백테스트 | `.\.venv\Scripts\python.exe -m pipelines.modeling.backtest --competition de.1` |
 | 평가 보고서 | `.\.venv\Scripts\python.exe -m pipelines.modeling.evaluation --competition de.1 --markdown-dir docs/reports` |
 | 해외 배당 지금 받기(리그당 1크레딧) | `.\.venv\Scripts\python.exe -m pipelines.ingest.the_odds_api --force en.1` |
@@ -165,7 +165,7 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 
 - **모델은 아직 검증되지 않았습니다.** EPL은 시장 배당보다 부정확했고, 다른 네 리그는 과거 배당이 없어 비교하지 못했습니다. The Odds API로 쌓이는 경기 전 배당으로 앞으로 비교합니다.
 - **경기 기록(슈팅·퇴장)은 EPL만 있습니다.** 라인업·부상 정보는 쓰지 않습니다.
-- **NBA는 수집기만 준비됐습니다(5d-a).** balldontlie 키를 받으면 과거 시즌을 수집하고, 배당(5d-b)·모델(5d-c)·경기 전 기록(5d-d)을 차례로 붙입니다.
+- **NBA는 경기 결과까지만 있습니다(5d-a).** 배당(5d-b)·모델(5d-c)·경기 전 기록(5d-d)을 차례로 붙입니다.
 - **미니 PC 상시 운영(4c)**은 장비 도입 후입니다.
 
 Football data provided by the Football-Data.org API.
