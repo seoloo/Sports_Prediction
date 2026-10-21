@@ -6,19 +6,50 @@
   home_new·away_new는 그 팀이 이번 시즌 승격 팀인지다(promoted_effect를 켠 모델만 쓴다).
 - version: 모델 이름 + 코드 버전 + 하이퍼파라미터. 예측 기록에 함께 남겨, 어떤 모델이 낸 확률인지 추적한다.
 
-학습 입력 한 경기 = (kickoff_utc, home_team, away_team, ft_home, ft_away[, home_new, away_new]).
+학습 입력 한 경기 = TrainingMatch(시작 시각, 홈, 원정, 홈 득점, 원정 득점, [승격 표시, 유효 슈팅, 퇴장, 쉰 날 수]).
+위치로도 읽을 수 있는 이름 있는 튜플이라 (시작, 홈, 원정, 홈 득점, 원정 득점) 5칸 튜플도 그대로 받는다.
 scipy 없이 numpy만 쓴다. Poisson은 벌점(ridge) 붙은 IRLS로 몇 밀리초에 학습된다.
 """
 import math
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import NamedTuple
 
 import numpy as np
 
 CODE_VERSION = "3e.1"   # 학습·예측 로직을 바꾸면 올린다. 같은 하이퍼파라미터라도 다른 모델로 기록된다.
 MAX_GOALS = 10          # 점수 확률표 크기(0~10골). 11골 이상 확률은 무시할 만큼 작아 정규화로 흡수한다.
 RHO_GRID = np.round(np.arange(-0.25, 0.2501, 0.005), 3)   # Dixon-Coles 저득점 보정 계수 후보
-PROMOTED_RIDGE = 1.0    # 승격 효과 계수에 붙는 약한 벌점. 학습 초기에 승격 팀 경기가 거의 없을 때 값이 튀지 않게
+PROMOTED_RIDGE = 1.0    # 승격·휴식 계수에 붙는 약한 벌점. 학습 초기에 해당 경기가 거의 없을 때 값이 튀지 않게
+REST_CAP_DAYS = 7.0     # 쉰 날 수 차이는 ±7일에서 자른다(시즌 첫 경기처럼 몇 달 쉰 경우가 계수를 끌고 가지 않게)
+
+
+class TrainingMatch(NamedTuple):
+    """학습 경기 하나. 앞 5칸은 필수, 나머지는 쓰는 모델만 읽는다(없으면 기본값)."""
+    kickoff: datetime
+    home: str
+    away: str
+    home_goals: int
+    away_goals: int
+    home_new: bool = False          # 그 시즌 승격 팀인가(3e)
+    away_new: bool = False
+    home_sot: int | None = None     # 유효 슈팅(3g). 기록이 없으면 None → 득점만 쓴다
+    away_sot: int | None = None
+    red_cards: int = 0              # 그 경기의 퇴장 수(양 팀 합)
+    home_rest: float | None = None  # 직전 경기 뒤 쉰 날 수
+    away_rest: float | None = None
+
+
+def as_training(match) -> TrainingMatch:
+    """5칸·7칸 튜플이나 TrainingMatch를 TrainingMatch로."""
+    return match if isinstance(match, TrainingMatch) else TrainingMatch(*match)
+
+
+def rest_difference(home_rest, away_rest) -> float:
+    """(홈 쉰 날 − 원정 쉰 날)을 ±REST_CAP_DAYS에서 자르고 −1~1로. 어느 쪽이라도 모르면 0."""
+    if home_rest is None or away_rest is None:
+        return 0.0
+    return max(-REST_CAP_DAYS, min(REST_CAP_DAYS, float(home_rest) - float(away_rest))) / REST_CAP_DAYS
 
 
 def outcome(home_goals: int, away_goals: int) -> int:
@@ -46,8 +77,8 @@ class BaseRateModel:
             self.counts[outcome(match[3], match[4])] += 1
         return self
 
-    def predict(self, home_team: str, away_team: str, home_new: bool = False,
-                away_new: bool = False) -> tuple[float, float, float]:
+    def predict(self, home_team: str, away_team: str, home_new: bool = False, away_new: bool = False,
+                home_rest=None, away_rest=None) -> tuple[float, float, float]:
         probabilities = self.counts / self.counts.sum()
         return tuple(float(value) for value in probabilities)
 
@@ -69,6 +100,10 @@ class PoissonModel:
       작으면 가운데로 모은다. 축소 때문에 확률이 눌리는 문제(3c)를 검증 시즌에서 고른 값 하나로 보정한다.
     - calibration(3f): temperature를 어떻게 골랐는지(예: "cross_fit_by_season"). 예측에는 영향이 없고
       버전에만 남는다. 고르는 방법이 다르면 검증 점수의 뜻이 달라지므로 다른 모델로 기록한다.
+    - shot_weight(3g): 학습 목표를 (1 − w) × 득점 + w × (유효 슈팅 × 리그 전환율)로 바꾼다. 유효 슈팅은 득점보다
+      운에 덜 좌우되는 공격력 지표다. 전환율 = 학습 경기의 총득점 ÷ 총 유효 슈팅. 기록이 없는 경기는 득점만 쓴다.
+    - red_card_weight(3g): 퇴장이 나온 경기의 가중치에 곱한다. 한 명이 적은 경기는 원래 전력을 덜 보여 준다.
+    - rest_effect(3g): 두 팀 쉰 날 수 차이(±7일, rest_difference)의 계수 하나를 학습해 기대 득점에 더한다.
     """
     ridge: float = 3.0
     half_life_days: float | None = 180.0
@@ -76,10 +111,14 @@ class PoissonModel:
     promoted_effect: bool = False
     temperature: float = 1.0
     calibration: str | None = None
+    shot_weight: float = 0.0
+    red_card_weight: float = 1.0
+    rest_effect: bool = False
     mu: float = 0.0
     home_advantage: float = 0.0
     promoted_attack: float = 0.0
     promoted_defence: float = 0.0
+    rest_coefficient: float = 0.0
     attack: dict = field(default_factory=dict)
     defence: dict = field(default_factory=dict)
 
@@ -92,6 +131,12 @@ class PoissonModel:
             params["temperature"] = self.temperature
         if self.calibration:
             params["calibration"] = self.calibration
+        if self.shot_weight:
+            params["shot_weight"] = self.shot_weight
+        if self.red_card_weight != 1.0:
+            params["red_card_weight"] = self.red_card_weight
+        if self.rest_effect:
+            params["rest_effect"] = True
         return params
 
     @property
@@ -101,16 +146,44 @@ class PoissonModel:
             version += "|promoted_effect"
         if self.temperature != 1.0:
             version += f"|temperature={self.temperature}"
+        if self.shot_weight:
+            version += f"|shot_weight={self.shot_weight}"
+        if self.red_card_weight != 1.0:
+            version += f"|red_card_weight={self.red_card_weight}"
+        if self.rest_effect:
+            version += "|rest_effect"
         if self.calibration:
             version += f"|calibration={self.calibration}"
         return version
 
     def weights(self, matches: list[tuple], as_of: datetime) -> np.ndarray:
-        """경기별 시간 가중치. as_of에 가까운 경기일수록 1에 가깝다."""
+        """경기별 가중치. as_of에 가까운 경기일수록 1에 가깝고, 퇴장이 나온 경기는 red_card_weight를 곱한다."""
         if self.half_life_days is None:
-            return np.ones(len(matches))
-        ages = np.array([(as_of - match[0]).total_seconds() / 86400 for match in matches])
-        return 0.5 ** (np.maximum(ages, 0) / self.half_life_days)
+            weights = np.ones(len(matches))
+        else:
+            ages = np.array([(as_of - match[0]).total_seconds() / 86400 for match in matches])
+            weights = 0.5 ** (np.maximum(ages, 0) / self.half_life_days)
+        if self.red_card_weight != 1.0:
+            weights = weights * np.array([self.red_card_weight if as_training(m).red_cards else 1.0 for m in matches])
+        return weights
+
+    def targets(self, matches: list[tuple]) -> np.ndarray:
+        """경기마다 [홈 목표, 원정 목표]. shot_weight가 0이면 득점 그대로."""
+        goals = np.array([(match[3], match[4]) for match in matches], dtype=float)
+        if not self.shot_weight:
+            return goals
+        rows = [as_training(match) for match in matches]
+        with_stats = [row for row in rows if row.home_sot is not None and row.away_sot is not None]
+        shots = sum(row.home_sot + row.away_sot for row in with_stats)
+        if not with_stats or shots == 0:
+            return goals
+        conversion = sum(row.home_goals + row.away_goals for row in with_stats) / shots
+        blended = goals.copy()
+        for index, row in enumerate(rows):
+            if row.home_sot is not None and row.away_sot is not None:
+                blended[index] = ((1 - self.shot_weight) * goals[index]
+                                  + self.shot_weight * conversion * np.array([row.home_sot, row.away_sot]))
+        return blended
 
     def flags(self, match: tuple) -> tuple[bool, bool]:
         """학습 경기의 (홈 승격 팀, 원정 승격 팀). 승격 효과를 끈 모델이나 표시가 없는 경기는 (False, False)."""
@@ -123,12 +196,15 @@ class PoissonModel:
         index = {team: position for position, team in enumerate(teams)}
         team_count = len(teams)
         promoted_column = 2 + 2 * team_count
-        # 열: [mu, home_advantage, attack_0..attack_T-1, defence_0..defence_T-1, (승격 공격, 승격 수비)]
+        rest_column = promoted_column + (2 if self.promoted_effect else 0)
+        # 열: [mu, home_advantage, attack_0..attack_T-1, defence_0..defence_T-1, (승격 공격, 승격 수비), (휴식)]
         # 행: 경기마다 홈 득점 1행, 원정 득점 1행
-        design = np.zeros((2 * len(matches), promoted_column + (2 if self.promoted_effect else 0)))
+        design = np.zeros((2 * len(matches), rest_column + (1 if self.rest_effect else 0)))
         goals = np.zeros(2 * len(matches))
+        targets = self.targets(matches)
         for row, match in enumerate(matches):
-            home, away, home_goals, away_goals = match[1:5]
+            home, away = match[1:3]
+            home_goals, away_goals = targets[row]
             h, a = index[home], index[away]
             design[2 * row, [0, 1, 2 + h, 2 + team_count + a]] = [1, 1, 1, -1]
             design[2 * row + 1, [0, 2 + a, 2 + team_count + h]] = [1, 1, -1]
@@ -139,6 +215,11 @@ class PoissonModel:
                 design[2 * row, promoted_column + 1] -= away_new
                 design[2 * row + 1, promoted_column] += away_new
                 design[2 * row + 1, promoted_column + 1] -= home_new
+            if self.rest_effect:
+                # 더 쉰 팀의 기대 득점이 rest_coefficient만큼 오르고, 상대는 그만큼 내려간다.
+                difference = rest_difference(as_training(match).home_rest, as_training(match).away_rest)
+                design[2 * row, rest_column] = difference
+                design[2 * row + 1, rest_column] = -difference
             goals[2 * row], goals[2 * row + 1] = home_goals, away_goals
         row_weights = np.repeat(self.weights(matches, as_of), 2)
         penalty = np.full(design.shape[1], float(self.ridge))
@@ -163,30 +244,34 @@ class PoissonModel:
         if self.promoted_effect:
             self.promoted_attack = float(coefficients[promoted_column])
             self.promoted_defence = float(coefficients[promoted_column + 1])
+        if self.rest_effect:
+            self.rest_coefficient = float(coefficients[rest_column])
         return self
 
     def expected_goals(self, home_team: str, away_team: str, home_new: bool = False,
-                       away_new: bool = False) -> tuple[float, float]:
+                       away_new: bool = False, home_rest=None, away_rest=None) -> tuple[float, float]:
         """홈·원정 기대 득점. 모르는 팀은 공격력·수비력 0(리그 평균), 승격 팀이면 승격 계수를 더한다."""
         attack, defence = self.attack.get, self.defence.get
         home_attack = attack(home_team, 0.0) + (self.promoted_attack if home_new else 0.0)
         home_defence = defence(home_team, 0.0) + (self.promoted_defence if home_new else 0.0)
         away_attack = attack(away_team, 0.0) + (self.promoted_attack if away_new else 0.0)
         away_defence = defence(away_team, 0.0) + (self.promoted_defence if away_new else 0.0)
-        home = math.exp(self.mu + self.home_advantage + home_attack - away_defence)
-        away = math.exp(self.mu + away_attack - home_defence)
+        rest = self.rest_coefficient * rest_difference(home_rest, away_rest) if self.rest_effect else 0.0
+        home = math.exp(self.mu + self.home_advantage + home_attack - away_defence + rest)
+        away = math.exp(self.mu + away_attack - home_defence - rest)
         return home, away
 
     def score_matrix(self, home_team: str, away_team: str, home_new: bool = False,
-                     away_new: bool = False) -> np.ndarray:
+                     away_new: bool = False, home_rest=None, away_rest=None) -> np.ndarray:
         """[홈 득점, 원정 득점] 확률표(0~MAX_GOALS골)."""
-        home, away = self.expected_goals(home_team, away_team, home_new, away_new)
+        home, away = self.expected_goals(home_team, away_team, home_new, away_new, home_rest, away_rest)
         return np.outer(poisson_pmf(home), poisson_pmf(away))
 
-    def predict(self, home_team: str, away_team: str, home_new: bool = False,
-                away_new: bool = False) -> tuple[float, float, float]:
+    def predict(self, home_team: str, away_team: str, home_new: bool = False, away_new: bool = False,
+                home_rest=None, away_rest=None) -> tuple[float, float, float]:
         flags = (home_new, away_new) if self.promoted_effect else (False, False)
-        return sharpen(outcome_probabilities(self.score_matrix(home_team, away_team, *flags)), self.temperature)
+        matrix = self.score_matrix(home_team, away_team, *flags, home_rest, away_rest)
+        return sharpen(outcome_probabilities(matrix), self.temperature)
 
 
 @dataclass
@@ -220,9 +305,9 @@ class DixonColesModel(PoissonModel):
         return self
 
     def score_matrix(self, home_team: str, away_team: str, home_new: bool = False,
-                     away_new: bool = False) -> np.ndarray:
-        matrix = super().score_matrix(home_team, away_team, home_new, away_new)
-        home, away = self.expected_goals(home_team, away_team, home_new, away_new)
+                     away_new: bool = False, home_rest=None, away_rest=None) -> np.ndarray:
+        matrix = super().score_matrix(home_team, away_team, home_new, away_new, home_rest, away_rest)
+        home, away = self.expected_goals(home_team, away_team, home_new, away_new, home_rest, away_rest)
         for x in (0, 1):
             for y in (0, 1):
                 # 학습에 없던 극단적인 조합에서 음수가 되면 0으로 자른다(정규화가 나머지를 맞춤).
@@ -261,6 +346,50 @@ def sharpen(probabilities: tuple[float, float, float], temperature: float) -> tu
     return tuple(value / total for value in powered)
 
 
+def blend(model: tuple, market: tuple, market_weight: float) -> tuple[float, float, float]:
+    """시장 확률과 모델 확률의 로그 선형 결합: p ∝ market^w × model^(1 − w). w = 1이면 시장 그대로, 0이면 모델 그대로."""
+    combined = [m ** market_weight * p ** (1 - market_weight) for m, p in zip(market, model)]
+    total = sum(combined)
+    return tuple(value / total for value in combined)
+
+
+@dataclass
+class MarketBlendModel:
+    """시장 배당(마진 뺀 확률)을 출발점으로 두고 모델 확률을 섞는다(3g).
+
+    시장에는 부상·선발·이적처럼 이 모델이 모르는 정보가 이미 들어 있다. 이 결합이 시장보다 확실히 나아야
+    "모델이 시장에 없는 정보를 더한다"고 말할 수 있다. 시장 확률이 없으면 확률을 만들지 않는다.
+    """
+    base: object
+    market_weight: float
+    calibration: str | None = None
+    name: str = "market_blend"
+    needs_market = True
+
+    @property
+    def params(self) -> dict:
+        params = {"base": self.base.name, "base_params": self.base.params, "market_weight": self.market_weight}
+        if self.calibration:
+            params["calibration"] = self.calibration
+        return params
+
+    @property
+    def version(self) -> str:
+        version = f"{self.name}|{CODE_VERSION}|base=({self.base.version})|market_weight={self.market_weight}"
+        return version + (f"|calibration={self.calibration}" if self.calibration else "")
+
+    def fit(self, matches: list[tuple], as_of: datetime) -> "MarketBlendModel":
+        self.base.fit(matches, as_of)
+        return self
+
+    def predict(self, home_team: str, away_team: str, home_new: bool = False, away_new: bool = False,
+                home_rest=None, away_rest=None, market: tuple | None = None):
+        if market is None:
+            return None
+        return blend(self.base.predict(home_team, away_team, home_new, away_new, home_rest, away_rest), market,
+                     self.market_weight)
+
+
 def promoted_by_season(fixtures) -> dict[str, set[str]]:
     """(시즌, 홈 팀, 원정 팀) 목록 → 시즌별 승격 팀(직전 시즌 목록에 없던 팀).
 
@@ -281,10 +410,16 @@ def model_from_params(name: str, params: dict):
     """저장된 이름·하이퍼파라미터로 같은 설정의 모델을 만든다(백테스트·경기 전 예측 공용)."""
     if name == "base_rate":
         return BaseRateModel()
+    if name.startswith("market_blend"):
+        return MarketBlendModel(base=model_from_params(params["base"], params["base_params"]),
+                                market_weight=float(params["market_weight"]), calibration=params.get("calibration"))
     model_class = DixonColesModel if name.startswith("dixon_coles") else PoissonModel
     return model_class(name=name, ridge=params["ridge"], half_life_days=params["half_life_days"],
                        promoted_effect=bool(params.get("promoted_effect", False)),
-                       temperature=float(params.get("temperature", 1.0)), calibration=params.get("calibration"))
+                       temperature=float(params.get("temperature", 1.0)), calibration=params.get("calibration"),
+                       shot_weight=float(params.get("shot_weight", 0.0)),
+                       red_card_weight=float(params.get("red_card_weight", 1.0)),
+                       rest_effect=bool(params.get("rest_effect", False)))
 
 
 def outcome_probabilities(matrix: np.ndarray) -> tuple[float, float, float]:

@@ -160,7 +160,11 @@ def test_run_selects_on_validation_and_tests_once(monkeypatch):
     assert calibrated["chosen"].endswith("|calibration=cross_fit_by_season")
     assert set(calibrated["fold_temperatures"]) == {"2021-22", "2022-23"}
     assert set(report["test"]) == {"base_rate", "poisson", "dixon_coles", "poisson_promoted", "poisson_calibrated",
-                                   "poisson_promoted_calibrated"}
+                                   "poisson_promoted_calibrated", "poisson_plus", "poisson_plus_calibrated",
+                                   "market_blend"}
+    assert report["validation"]["poisson_plus"]["tried"] == 20
+    # 가상 자료에는 시장 배당이 없으므로 시장 결합은 확률 없이 모두 보류
+    assert report["test"]["market_blend"]["overall"]["withheld"] == report["test"]["market_blend"]["overall"]["matches"]
 
 
 @pytest.fixture
@@ -209,3 +213,22 @@ def test_database_rejects_leaky_or_invalid_predictions(stored, change):
         prediction["probabilities"] = change["probabilities"]
     with psycopg.connect(s.postgres_conninfo) as conn, pytest.raises(psycopg.errors.CheckViolation):
         backtest.store_run(conn, BaseRateModel(), "TEST", ["2025-26"], "c" * 64, {"overall": {}}, [prediction])
+
+
+def test_market_weight_and_blended_predictions():
+    markets = {1: (0.7, 0.2, 0.1), 2: None}
+    # 시장이 정확하고 모델이 엉뚱하면 시장 비중이 1에 가깝게
+    items = [{"match_id": 1, "season": "S", "probabilities": (0.2, 0.3, 0.5), "result": "HOME", "withheld_reason": None}
+             for _ in range(50)]
+    assert backtest.fit_market_weight(items, markets) >= 0.9
+    blended = backtest.blend_predictions(items[:1] + [{**items[0], "match_id": 2}], markets, lambda item: 0.5)
+    assert blended[0]["probabilities"] is not None and blended[1]["probabilities"] is None
+    assert blended[1]["withheld_reason"] == "MARKET_ODDS_MISSING"
+
+
+def test_training_tuple_carries_stats_and_rest():
+    row = {**synthetic_rows()[0], "home_sot": 6, "away_sot": 3, "red_cards": 1, "home_rest_days": 4.5,
+           "away_rest_days": None, "home_new": True}
+    match = backtest.training_tuple(row)
+    assert (match.home_sot, match.away_sot, match.red_cards, match.home_rest, match.away_rest, match.home_new) == (
+        6, 3, 1, 4.5, None, True)

@@ -33,10 +33,11 @@ EARLY_MATCHES = 10               # "시즌 초반" = 팀의 그 시즌 첫 10경
 # 검증 기준(제안값). 바꾸면 METHOD가 바뀌어 새 보고서로 저장된다.
 GATE = {"max_ece": 0.03, "must_beat": "market_pre"}
 METHOD = {"bootstrap_samples": BOOTSTRAP_SAMPLES, "seed": BOOTSTRAP_SEED, "block": "fit_cutoff (ISO week)",
-          "calibration_edges": CALIBRATION_EDGES, "early_matches": EARLY_MATCHES, "gate": GATE, "version": "3c.3"}
+          "calibration_edges": CALIBRATION_EDGES, "early_matches": EARLY_MATCHES, "gate": GATE, "version": "3c.4"}
 # 비교할 짝(왼쪽 − 오른쪽). 3e 개선 모델은 같은 설정의 기존 Poisson과 비교해 각 개선의 효과만 본다.
 COMPARISONS = (("poisson", "base_rate"), ("dixon_coles", "poisson"), ("poisson_promoted", "poisson"),
-               ("poisson_calibrated", "poisson"), ("poisson_promoted_calibrated", "poisson"))
+               ("poisson_calibrated", "poisson"), ("poisson_promoted_calibrated", "poisson"),
+               ("poisson_plus", "poisson"), ("poisson_plus_calibrated", "poisson"))
 TIMING_LABELS = {"market_pre": "시장 마감 전 배당", "market_close": "시장 마감 배당"}
 
 
@@ -246,7 +247,8 @@ def store_report(conn: psycopg.Connection, report: dict) -> tuple[int, bool]:
 
 LABELS = {"base_rate": "단순 비율", "poisson": "Poisson", "dixon_coles": "Dixon-Coles",
           "poisson_promoted": "Poisson+승격 효과", "poisson_calibrated": "Poisson+보정",
-          "poisson_promoted_calibrated": "Poisson+승격 효과+보정"}
+          "poisson_promoted_calibrated": "Poisson+승격 효과+보정", "poisson_plus": "Poisson+경기 기록",
+          "poisson_plus_calibrated": "Poisson+경기 기록+보정", "market_blend": "시장 결합"}
 OUTCOME_LABELS = {"HOME": "홈 승", "DRAW": "무승부", "AWAY": "원정 승"}
 
 
@@ -282,7 +284,7 @@ def render_markdown(report: dict) -> str:
     lines += ["| 대상 | " + " | ".join(f"{OUTCOME_LABELS[o]} ECE" for o in OUTCOMES) + " |", "|---|---|---|---|"]
     for label, result in calibrated.items():
         lines.append(f"| {label} | " + " | ".join(f"{result[o]['ece']:.4f}" for o in OUTCOMES) + " |")
-    for name in ("poisson_calibrated", "dixon_coles", "poisson"):
+    for name in ("market_blend", "poisson_calibrated", "dixon_coles", "poisson"):
         if name not in report["models"]:
             continue
         lines += ["", f"### {LABELS[name]} 구간별", "", "| 결과 | 예측 구간 | 경기 | 평균 예측 | 실제 [95%] | |", "|---|---|---|---|---|---|"]

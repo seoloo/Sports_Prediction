@@ -23,7 +23,7 @@ from ..config import load_settings
 from ..db import connect, migrate
 from ..snapshots import KNOWN_FIXTURES_SQL
 from .backtest import OUTCOMES, brier, log_loss
-from .models import model_from_params, promoted_by_season
+from .models import TrainingMatch, model_from_params, promoted_by_season
 MIN_TRAINING_MATCHES = 100
 MIN_TEAM_HISTORY = 5          # 한 팀의 학습 경기가 이보다 적으면(승격 팀 시즌 초 등) 사유를 하나 더 붙인다
 MODE = "PROSPECTIVE"
@@ -37,14 +37,18 @@ def known_fixtures(conn: psycopg.Connection, as_of: datetime) -> list[dict]:
 
 
 def active_model(conn: psycopg.Connection) -> dict | None:
-    """3b 시험 실행 중 검증 로그 손실이 가장 낮은 모델과, 그 실행을 평가한 가장 최근 3c 보고서의 검증 상태."""
+    """3b 시험 실행 중 검증 로그 손실이 가장 낮은 모델과, 그 실행을 평가한 가장 최근 3c 보고서의 검증 상태.
+
+    시장 결합(market_blend, 3g)은 뺀다. 경기 전 시점에 쓸 시장 배당(다가올 경기의 평균 배당)이 없기 때문이다.
+    """
     candidates = conn.execute("""
         SELECT DISTINCT ON (t.model_name) t.model_name, t.run_id, t.model_version, t.params,
                (v.summary->'overall'->>'log_loss')::float AS validation_log_loss
         FROM modeling.backtest_runs t
         JOIN modeling.backtest_runs v ON v.purpose = 'VALIDATION' AND v.model_version = t.model_version
                                       AND v.dataset_hash = t.dataset_hash
-        WHERE t.purpose = 'TEST' ORDER BY t.model_name, t.run_id DESC""").fetchall()
+        WHERE t.purpose = 'TEST' AND t.model_name NOT LIKE 'market_blend%'
+        ORDER BY t.model_name, t.run_id DESC""").fetchall()
     if not candidates:
         return None
     name, run_id, version, params, validation_loss = min(candidates, key=lambda row: row[4])
@@ -77,9 +81,19 @@ class Predictor:
                            if row["status"] == "FINISHED" and row["kickoff_utc"] is not None
                            and row["kickoff_utc"] < as_of and row["ft_home"] is not None),
                           key=lambda row: (row["kickoff_utc"], row["match_id"]))
-        self.training = [(row["kickoff_utc"], row["home"], row["away"], row["ft_home"], row["ft_away"],
-                          self.is_promoted(row["home"], row["season"]), self.is_promoted(row["away"], row["season"]))
-                         for row in finished]
+        # 경기 기록(3g): as_of에 실제로 받아 둔 것만. 쉰 날 수는 각 팀의 직전 끝난 경기 기준(데이터셋과 같은 정의).
+        stats = {match_id: (home_sot, away_sot, reds) for match_id, home_sot, away_sot, reds in conn.execute(
+            """SELECT match_id, home_shots_on_target, away_shots_on_target, home_red_cards + away_red_cards
+               FROM silver.match_stats_known_at(%s) WHERE source_id = 'football-data-co-uk'""", (as_of,)).fetchall()}
+        self.last_played, self.training = {}, []
+        for row in finished:
+            rests = [self.rest_days(team, row["kickoff_utc"]) for team in (row["home"], row["away"])]
+            home_sot, away_sot, reds = stats.get(row["match_id"], (None, None, 0))
+            self.training.append(TrainingMatch(
+                row["kickoff_utc"], row["home"], row["away"], row["ft_home"], row["ft_away"],
+                self.is_promoted(row["home"], row["season"]), self.is_promoted(row["away"], row["season"]),
+                home_sot, away_sot, reds, *rests))
+            self.last_played[row["home"]] = self.last_played[row["away"]] = row["kickoff_utc"]
         self.training_hash = hashlib.sha256(repr([(r[0].isoformat(), *r[1:]) for r in self.training]).encode()).hexdigest()
         self.history = Counter(team for match in self.training for team in (match[1], match[2]))
         if self.active is None:
@@ -94,10 +108,16 @@ class Predictor:
     def is_promoted(self, team: str, season: str | None) -> bool:
         return team in self.promoted.get(season, set())
 
-    def predict(self, home: str, away: str, season: str | None = None) -> dict:
+    def rest_days(self, team: str, kickoff: datetime | None) -> float | None:
+        """팀의 직전 끝난 경기(학습 자료에 이미 넣은 것) 뒤 쉰 날 수. 모르면 None."""
+        last = self.last_played.get(team)
+        return None if last is None or kickoff is None else (kickoff - last).total_seconds() / 86400
+
+    def predict(self, home: str, away: str, season: str | None = None, kickoff: datetime | None = None) -> dict:
         """저장할 예측 한 행. 확률은 모델이 있을 때만, 표시 상태는 검증 기준과 자료 부족 여부로 정한다."""
         reasons = list(self.reasons)
-        probabilities = (self.model.predict(home, away, self.is_promoted(home, season), self.is_promoted(away, season))
+        probabilities = (self.model.predict(home, away, self.is_promoted(home, season), self.is_promoted(away, season),
+                                            self.rest_days(home, kickoff), self.rest_days(away, kickoff))
                          if self.model else None)
         if self.active and self.active["gate_status"] != "VALIDATED":
             reasons.append("MODEL_NOT_VALIDATED")
@@ -128,13 +148,13 @@ def insert_prediction(conn: psycopg.Connection, match_id: int, offset_label: str
 
 
 def record_for_snapshot(conn: psycopg.Connection, match_id: int, offset_label: str, home: str, away: str,
-                        as_of: datetime, cache: dict, season: str | None = None) -> str:
+                        as_of: datetime, cache: dict, season: str | None = None, kickoff: datetime | None = None) -> str:
     """방금 찍은 스냅샷에 모델 예측을 붙인다. 예측이 실패해도 스냅샷은 지키고 실패 사유를 WITHHELD로 남긴다."""
     try:
         with conn.transaction():   # 저장점: 실패하면 이 예측만 취소
             if as_of not in cache:
                 cache[as_of] = Predictor(conn, as_of)
-            row = cache[as_of].predict(home, away, season)
+            row = cache[as_of].predict(home, away, season, kickoff)
             insert_prediction(conn, match_id, offset_label, as_of, row)
             return row["display_status"]
     except Exception as exc:   # noqa: BLE001 (예측 실패가 입력 스냅샷까지 잃게 하지 않는다)

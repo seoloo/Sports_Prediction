@@ -30,6 +30,20 @@ def load_dataset(conn: psycopg.Connection, *, finished_only: bool = True) -> lis
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
+def load_match_stats(conn: psycopg.Connection) -> dict:
+    """경기 ID → 끝난 경기의 기록(유효 슈팅, 퇴장 수 합, 3g). gold.match_stats에 없는 경기는 빠진다."""
+    return {match_id: {"home_sot": home_sot, "away_sot": away_sot, "red_cards": home_red + away_red}
+            for match_id, home_sot, away_sot, home_red, away_red in conn.execute(
+                """SELECT match_id, home_shots_on_target, away_shots_on_target, home_red_cards, away_red_cards
+                   FROM gold.match_stats""").fetchall()}
+
+
+def attach_stats(rows: list[dict], stats: dict) -> list[dict]:
+    """데이터셋 행에 그 경기의 기록을 붙인 복사본. 기록은 결과와 같은 사후 정보라 학습(과거 경기)에만 쓴다."""
+    empty = {"home_sot": None, "away_sot": None, "red_cards": 0}
+    return [{**row, **stats.get(row["match_id"], empty)} for row in rows]
+
+
 def _recompute(history: list[tuple], kickoff, match_id) -> dict:
     """한 팀의 과거 경기(시작 시각, 경기 ID, 득점, 실점, 승점) 중 kickoff 시점에 알려진 것으로 특징을 계산한다."""
     known = [row for row in history if row[1] != match_id and row[0] + AVAILABILITY_LAG <= kickoff]

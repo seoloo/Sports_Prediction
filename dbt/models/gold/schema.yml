@@ -66,6 +66,16 @@ models:
       - name: price_home
         data_tests: [not_null]
 
+  - name: match_stats
+    description: 끝난 경기의 기록(슈팅·유효 슈팅·퇴장, 3g). 경기 후 기록이라 대상 경기보다 앞서 끝난 경기의 것만 모델 입력이 된다
+    columns:
+      - name: match_id
+        data_tests: [unique, not_null]
+      - name: home_shots_on_target
+        data_tests: [not_null]
+      - name: away_shots_on_target
+        data_tests: [not_null]
+
   - name: match_features_pit
     description: 시간순 학습·평가 데이터셋. 경기마다 시작 전에 알 수 있던 결과만으로 만든 팀 특징, 시장 기준선, 결과(과거 재구성 가정)
     columns:

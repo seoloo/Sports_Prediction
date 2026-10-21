@@ -145,3 +145,54 @@ def test_model_from_params_rebuilds_the_same_version():
 def test_promoted_by_season_compares_with_the_previous_season():
     fixtures = [("2020-21", "A", "B"), ("2020-21", "C", "D"), ("2021-22", "A", "B"), ("2021-22", "C", "E")]
     assert promoted_by_season(fixtures) == {"2020-21": set(), "2021-22": {"E"}}
+
+
+def test_shot_weight_learns_from_shots_on_target():
+    from pipelines.modeling.models import TrainingMatch
+    # A는 골은 운 없게 1골씩이지만 유효 슈팅이 늘 B의 세 배. 슈팅을 섞으면 A를 더 강하게 본다.
+    matches = []
+    for day in range(1, 61):
+        kickoff = AS_OF - timedelta(days=day)
+        home, away = ("A", "B") if day % 2 else ("B", "A")
+        matches.append(TrainingMatch(kickoff, home, away, 1, 1, home_sot=9 if home == "A" else 3,
+                                     away_sot=3 if home == "A" else 9))
+    goals_only = PoissonModel(ridge=1, half_life_days=None).fit(matches, AS_OF)
+    with_shots = PoissonModel(ridge=1, half_life_days=None, shot_weight=0.5).fit(matches, AS_OF)
+    assert abs(goals_only.attack["A"] - goals_only.attack["B"]) < 1e-6
+    assert with_shots.attack["A"] > with_shots.attack["B"] + 0.2
+    assert "shot_weight=0.5" in with_shots.version and with_shots.params["shot_weight"] == 0.5
+
+
+def test_red_cards_lower_weight_and_rest_effect_is_learned():
+    from pipelines.modeling.models import TrainingMatch, rest_difference
+    model = PoissonModel(half_life_days=None, red_card_weight=0.5)
+    assert list(model.weights([TrainingMatch(AS_OF, "A", "B", 1, 0, red_cards=1),
+                               TrainingMatch(AS_OF, "A", "B", 1, 0)], AS_OF)) == [0.5, 1.0]
+    assert rest_difference(10, 3) == 1.0 and rest_difference(3, 4) == pytest.approx(-1 / 7) and rest_difference(None, 3) == 0
+    # 더 쉰 쪽(홈·원정을 번갈아)이 늘 2:1로 앞서는 가상 자료 → 홈 이점은 0 근처, 휴식 계수는 양수.
+    # 더 쉰 쪽이 늘 홈이면 휴식 효과와 홈 이점을 구분할 수 없어 번갈아 둔다.
+    matches = []
+    for d in range(1, 81):
+        home, away = ("A", "B") if d % 2 else ("B", "A")
+        home_rested = d % 4 < 2
+        matches.append(TrainingMatch(AS_OF - timedelta(days=d), home, away, 2 if home_rested else 1,
+                                     1 if home_rested else 2, home_rest=7 if home_rested else 3,
+                                     away_rest=3 if home_rested else 7))
+    rested = PoissonModel(ridge=1, half_life_days=None, rest_effect=True).fit(matches, AS_OF)
+    assert rested.rest_coefficient > 0.3
+    assert rested.predict("A", "B", home_rest=7, away_rest=3)[0] > rested.predict("A", "B", home_rest=3, away_rest=7)[0]
+
+
+def test_market_blend_and_rebuild():
+    from pipelines.modeling.models import MarketBlendModel, blend
+    assert blend((0.6, 0.2, 0.2), (0.4, 0.3, 0.3), 1.0) == pytest.approx((0.4, 0.3, 0.3))
+    assert blend((0.6, 0.2, 0.2), (0.4, 0.3, 0.3), 0.0) == pytest.approx((0.6, 0.2, 0.2))
+    mixed = blend((0.6, 0.2, 0.2), (0.4, 0.3, 0.3), 0.5)
+    assert 0.4 < mixed[0] < 0.6 and sum(mixed) == pytest.approx(1)
+    model = MarketBlendModel(base=PoissonModel(ridge=10.0, half_life_days=180.0), market_weight=0.7,
+                             calibration="cross_fit_by_season")
+    rebuilt = model_from_params(model.name, model.params)
+    assert rebuilt.version == model.version and "market_weight=0.7" in model.version
+    model.fit(synthetic_matches(rounds=3), AS_OF)
+    assert model.predict("A", "B") is None                                       # 시장 확률이 없으면 만들지 않는다
+    assert sum(model.predict("A", "B", market=(0.5, 0.3, 0.2))) == pytest.approx(1)

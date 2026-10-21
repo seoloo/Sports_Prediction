@@ -8,6 +8,7 @@
 4. 연결: 검토한 팀 이름 대조표(mappings/team_aliases.csv)로 openfootball 경기에 붙인다. 이름을 추측하지 않는다.
    날짜·점수가 openfootball과 다르면 덮어쓰지 않고 품질 문제로 남긴다(소스 간 교차 검증).
 5. Silver: 배당을 한 줄 형태로 COPY한 뒤 한 번의 SQL로 "값이 바뀐 것만" 다음 버전으로 추가한다.
+   끝난 경기의 기록(슈팅·유효 슈팅·퇴장, 3g)도 같은 방식으로 silver.match_stats_revisions에 넣는다.
 
 실행
   python -m pipelines.ingest.football_data_co_uk                       # 기본 landing 폴더의 모든 파일
@@ -54,6 +55,10 @@ BOOKMAKER_NAME = {"P": "PS", "Max": "MAX", "Avg": "AVG"}
 PINNACLE_STALE_SINCE = date(2025, 7, 23)
 PINNACLE_CAUTION = "PINNACLE_STALE_SINCE_2025_07_23"
 
+# 끝난 경기의 기록 열(football-data Notes): 슈팅, 유효 슈팅, 퇴장. 저장 이름 → CSV 열 이름
+STAT_COLUMNS = {"home_shots": "HS", "away_shots": "AS", "home_shots_on_target": "HST",
+                "away_shots_on_target": "AST", "home_red_cards": "HR", "away_red_cards": "AR"}
+
 # 같은 데이터셋을 동시에 수집하지 않게 잡는 advisory lock 앞 번호
 INGEST_LOCK_NAMESPACE = 7_302_202
 
@@ -71,7 +76,10 @@ class OddsQuote:
 
 @dataclass(frozen=True)
 class FixtureRow:
-    """CSV 한 행에서 읽은 경기 정보와 배당 목록. 점수가 비어 있으면 None(아직 안 열린 경기)."""
+    """CSV 한 행에서 읽은 경기 정보와 배당 목록. 점수가 비어 있으면 None(아직 안 열린 경기).
+
+    stats는 끝난 경기의 기록(STAT_COLUMNS의 저장 이름 → 값). 열이 없거나 비어 있으면 None(0으로 채우지 않음).
+    """
     record_index: int
     local_date: date
     local_time: time | None
@@ -80,6 +88,7 @@ class FixtureRow:
     ft_home: int | None
     ft_away: int | None
     quotes: tuple
+    stats: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -164,6 +173,24 @@ def extract_quotes(row: dict, headers: set[str], match_date: date):
     return quotes, problems
 
 
+def extract_stats(row: dict, headers: set[str]):
+    """끝난 경기 한 행의 기록과 (열, 문제 코드) 목록. 기록 열이 하나라도 없거나 비어 있으면 기록 없음(None)."""
+    if any(column not in headers for column in STAT_COLUMNS.values()):
+        return None, []
+    values = {}
+    for name, column in STAT_COLUMNS.items():
+        text = (row.get(column) or "").strip()
+        if not text:
+            return None, []
+        if not text.isdigit():
+            return None, [(column, "INVALID_STAT")]
+        values[name] = int(text)
+    for side in ("home", "away"):
+        if values[f"{side}_shots_on_target"] > values[f"{side}_shots"]:
+            return None, [(STAT_COLUMNS[f"{side}_shots_on_target"], "INCONSISTENT_STAT")]   # 유효 슈팅 > 슈팅
+    return values, []
+
+
 def _parse_date(text: str) -> date:
     """dd/mm/yyyy(최근 파일) 또는 dd/mm/yy(옛 파일) 날짜."""
     for fmt in ("%d/%m/%Y", "%d/%m/%y"):
@@ -221,9 +248,10 @@ def parse_csv(payload: bytes, *, division: str) -> tuple[list[FixtureRow], list[
             continue
         seen.add((home, away))
         quotes, problems = extract_quotes(row, headers, match_date)
-        for column, code in problems:
+        stats, stat_problems = extract_stats(row, headers) if ft_home is not None else (None, [])
+        for column, code in problems + stat_problems:
             reject(code, column=column, value=row.get(column))
-        fixtures.append(FixtureRow(index, match_date, match_time, home, away, ft_home, ft_away, tuple(quotes)))
+        fixtures.append(FixtureRow(index, match_date, match_time, home, away, ft_home, ft_away, tuple(quotes), stats))
     return fixtures, issues
 
 
@@ -294,6 +322,32 @@ def write_odds(conn: psycopg.Connection, linked, *, raw_file_id: int, received_a
     return inserted
 
 
+def write_stats(conn: psycopg.Connection, linked, *, raw_file_id: int, received_at: datetime) -> int:
+    """경기 기록을 임시 테이블에 COPY한 뒤, 경기별 최신 버전과 값이 다른 것만 다음 버전으로 넣는다."""
+    columns = list(STAT_COLUMNS)
+    conn.execute(f"""CREATE TEMP TABLE stats_stage (match_id BIGINT, {", ".join(f"{c} INTEGER" for c in columns)})
+                     ON COMMIT DROP""")
+    with conn.cursor().copy("COPY stats_stage FROM STDIN") as copy:
+        for fixture, match_id in linked:
+            if fixture.stats:
+                copy.write_row((match_id, *[fixture.stats[c] for c in columns]))
+    changed = " OR ".join(f"l.{c} IS DISTINCT FROM s.{c}" for c in columns)
+    return conn.execute(f"""
+        WITH latest AS (
+            SELECT DISTINCT ON (match_id) *
+            FROM silver.match_stats_revisions
+            WHERE source_id = %(source)s AND match_id IN (SELECT match_id FROM stats_stage)
+            ORDER BY match_id, revision_no DESC
+        )
+        INSERT INTO silver.match_stats_revisions (match_id, source_id, revision_no, {", ".join(columns)},
+                                                  published_at, received_at, raw_file_id)
+        SELECT s.match_id, %(source)s, COALESCE(l.revision_no, 0) + 1, {", ".join(f"s.{c}" for c in columns)},
+               NULL, %(received)s, %(raw_file)s
+        FROM stats_stage s LEFT JOIN latest l USING (match_id)
+        WHERE l.match_id IS NULL OR {changed}""",
+                        {"source": SOURCE_ID, "received": received_at, "raw_file": raw_file_id}).rowcount
+
+
 def ingest_file(path: Path, *, settings=None, received_at: datetime | None = None, alias_file: Path = ALIAS_FILE) -> dict:
     """CSV 파일 하나를 Bronze·Silver에 수집하고 실행 통계를 돌려준다. 같은 파일을 다시 넣어도 배당 버전은 늘지 않는다."""
     division, season = season_from_filename(path.name)
@@ -334,6 +388,7 @@ def ingest_file(path: Path, *, settings=None, received_at: datetime | None = Non
                              (run_id, raw_file_id, received_at, is_new_content))
                 linked, link_issues = link_fixtures(conn, fixtures, competition=competition, season=season)
                 odds_new = write_odds(conn, linked, raw_file_id=raw_file_id, received_at=received_at)
+                stats_new = write_stats(conn, linked, raw_file_id=raw_file_id, received_at=received_at)
                 issues = parse_issues + link_issues
                 if is_new_content:
                     for issue in issues:
@@ -343,6 +398,7 @@ def ingest_file(path: Path, *, settings=None, received_at: datetime | None = Non
             stats = {"dataset": dataset, "file": path.name, "sha256": sha256, "new_content": is_new_content,
                      "bronze_uploaded": bronze_uploaded, "fixtures": len(fixtures), "linked": len(linked),
                      "quotes": sum(len(fixture.quotes) for fixture, _ in linked), "odds_new": odds_new,
+                     "stats": sum(1 for fixture, _ in linked if fixture.stats), "stats_new": stats_new,
                      "issues": dict(Counter(issue.issue_code for issue in issues))}
             conn.execute("UPDATE ingest.runs SET status='SUCCEEDED', finished_at=%s, stats=%s WHERE run_id=%s",
                          (datetime.now(timezone.utc), Jsonb(stats), run_id))

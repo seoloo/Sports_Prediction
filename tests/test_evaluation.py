@@ -103,6 +103,6 @@ def test_store_report_is_idempotent_and_immutable(isolated_settings):
         first = evaluation.store_report(conn, report)
         again = evaluation.store_report(conn, report)
     assert first[1] is True and again == (first[0], False)
-    assert query(s, "SELECT run_ids, method->>'version' FROM modeling.evaluation_reports")[0] == ([7], "3c.3")
+    assert query(s, "SELECT run_ids, method->>'version' FROM modeling.evaluation_reports")[0] == ([7], "3c.4")
     with pytest.raises(psycopg.Error):
         query(s, "DELETE FROM modeling.evaluation_reports")

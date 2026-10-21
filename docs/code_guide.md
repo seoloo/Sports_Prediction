@@ -27,7 +27,7 @@
 | [pipelines/sql/001_ingest_silver.sql](../pipelines/sql/001_ingest_silver.sql) | `ingest`·`silver` 스키마, 불변 트리거, 기준 시각 함수 | `silver.match_revisions_known_at` |
 | [pipelines/object_store.py](../pipelines/object_store.py) | S3 Bronze 저장(내용 해시 경로, 없을 때만 업로드) | `put_if_absent`, `read_object` |
 | [pipelines/ingest/openfootball.py](../pipelines/ingest/openfootball.py) | openfootball 수집: 정규화(순수 함수) → Bronze → Silver | `normalize_document`, `write_silver`, `ingest` |
-| [pipelines/ingest/football_data_co_uk.py](../pipelines/ingest/football_data_co_uk.py) | 직접 내려받은 배당 CSV: 열 이름 기반 파싱 → 대조표로 경기 연결 → COPY + 집합 연산으로 바뀐 배당만 버전 추가 | `parse_csv`, `link_fixtures`, `write_odds`, `suggest_aliases` |
+| [pipelines/ingest/football_data_co_uk.py](../pipelines/ingest/football_data_co_uk.py) | 직접 내려받은 배당 CSV: 열 이름 기반 파싱 → 대조표로 경기 연결 → COPY + 집합 연산으로 바뀐 배당·경기 기록(3g)만 버전 추가 | `parse_csv`, `extract_stats`, `link_fixtures`, `write_odds`, `write_stats` |
 | [pipelines/mappings/team_aliases.csv](../pipelines/mappings/team_aliases.csv) | 검토한 팀 이름 대조표(같은 날짜 경기 근거) | — |
 | [pipelines/aliases.py](../pipelines/aliases.py) | 검토한 팀 대조표 읽기·반영(소스 공통) | `load_alias_file`, `sync_aliases` |
 | [pipelines/ingest/football_data_org.py](../pipelines/ingest/football_data_org.py) | API 수집기: 요청 한도·429 처리, Bronze 보존, 바뀐 경우에만 이벤트 발행, 조회 간격 자동 조절 | `RateLimiter`, `fetch_json`, `poll_once`, `next_poll_interval` |
@@ -45,7 +45,7 @@
 | [pipelines/dbt_runner.py](../pipelines/dbt_runner.py) | `.env` 접속 정보를 넘겨 별도 가상환경의 dbt 실행 | `run_dbt` |
 | [pipelines/schedule.py](../pipelines/schedule.py) | 날짜 → 수집할 시즌 이름(순수 함수) | `seasons_for` |
 | [pipelines/modeling/dataset.py](../pipelines/modeling/dataset.py) | 시간순 데이터셋 읽기, Python 독립 재계산으로 누수 검사(3a) | `load_dataset`, `verify_point_in_time` |
-| [pipelines/modeling/models.py](../pipelines/modeling/models.py) | 기준 모델: 단순 비율, Poisson(ridge IRLS·시간 감쇠), Dixon-Coles(3b), 승격 첫 시즌 효과·확률 보정(3e) | `PoissonModel.fit`, `DixonColesModel.fit`, `promoted_by_season`, `sharpen`, `model_from_params` |
+| [pipelines/modeling/models.py](../pipelines/modeling/models.py) | 기준 모델: 단순 비율, Poisson(ridge IRLS·시간 감쇠), Dixon-Coles(3b), 승격 첫 시즌 효과·확률 보정(3e), 유효 슈팅·퇴장·휴식 옵션과 시장 결합(3g) | `TrainingMatch`, `PoissonModel.fit`, `MarketBlendModel`, `blend`, `model_from_params` |
 | [pipelines/modeling/backtest.py](../pipelines/modeling/backtest.py) | 주 단위 재학습 백테스트, 검증 시즌에서 설정 선택, 시험 시즌 평가, 실행·예측 기록(3b) | `walk_forward`, `summarize`, `store_run`, `run` |
 | [pipelines/modeling/prospective.py](../pipelines/modeling/prospective.py) | 스냅샷 시점의 모델 예측(실제 수신 자료만, 검증 전 WITHHELD), 경기 후 채점, 주간 보고서(3d) | `active_model`, `Predictor`, `record_for_snapshot`, `run_weekly` |
 | [pipelines/modeling/evaluation.py](../pipelines/modeling/evaluation.py) | 저장된 시험 예측 평가: 블록 부트스트랩, 확률 보정, 약한 곳, 검증 기준, 보고서 저장·Markdown 생성(3c) | `block_bootstrap`, `calibration`, `segments`, `gate`, `render_markdown` |

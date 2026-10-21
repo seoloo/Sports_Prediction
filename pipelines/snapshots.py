@@ -117,8 +117,9 @@ def attach_prediction(conn: psycopg.Connection, match_id: int, label: str, match
         from .modeling.prospective import record_for_snapshot
     except ImportError:
         return "UNAVAILABLE"
+    kickoff = datetime.fromisoformat(match["kickoff_utc"]) if match.get("kickoff_utc") else None
     return record_for_snapshot(conn, match_id, label, match["home"], match["away"], as_of, predictors,
-                               season=match["season"])
+                               season=match["season"], kickoff=kickoff)
 
 
 def run(*, now: datetime | None = None, settings=None) -> dict:

@@ -28,8 +28,9 @@ from psycopg.types.json import Jsonb
 
 from ..config import load_settings
 from ..db import connect, migrate
-from .dataset import AVAILABILITY_LAG, load_dataset
-from .models import BaseRateModel, DixonColesModel, PoissonModel, model_from_params, promoted_by_season, sharpen
+from .dataset import AVAILABILITY_LAG, attach_stats, load_dataset, load_match_stats
+from .models import (BaseRateModel, DixonColesModel, MarketBlendModel, PoissonModel, TrainingMatch, blend,
+                     model_from_params, promoted_by_season, sharpen)
 
 MIN_TRAINING_MATCHES = 100
 # 하이퍼파라미터를 고르는 시즌(3e: 한 시즌 380경기로는 비슷한 후보 사이 차이가 잡음 수준이라 두 시즌으로 늘림).
@@ -42,8 +43,14 @@ AVAILABILITY_RULE = "result known at kickoff + 3h"
 RIDGE_GRID = (1.0, 3.0, 10.0, 30.0)
 HALF_LIFE_GRID = (None, 365.0, 180.0, 90.0)
 TEMPERATURE_GRID = tuple(round(0.70 + 0.01 * step, 2) for step in range(91))   # 0.70 ~ 1.60
-CALIBRATED_FROM = {"poisson_calibrated": "poisson", "poisson_promoted_calibrated": "poisson_promoted"}
+CALIBRATED_FROM = {"poisson_calibrated": "poisson", "poisson_promoted_calibrated": "poisson_promoted",
+                   "poisson_plus_calibrated": "poisson_plus"}
 CALIBRATION_METHOD = "cross_fit_by_season"
+# 3g: poisson에서 고른 ridge·반감기를 고정하고 경기 기록 옵션만 고른다(256개 전체 격자 대신 20개).
+SHOT_WEIGHT_GRID = (0.0, 0.25, 0.5, 0.75, 1.0)
+RED_CARD_WEIGHT_GRID = (1.0, 0.5)
+REST_EFFECT_GRID = (False, True)
+MARKET_WEIGHT_GRID = tuple(round(0.05 * step, 2) for step in range(21))   # 0 ~ 1
 
 
 def season_roles(rows: list[dict], validation_seasons: tuple[str, ...] | None = None) -> dict:
@@ -70,9 +77,15 @@ def mark_promoted(rows: list[dict]) -> list[dict]:
              "away_new": row["away_team"] in promoted.get(row["season"], set())} for row in rows]
 
 
-def training_tuple(row: dict) -> tuple:
-    return (row["kickoff_utc"], row["home_team"], row["away_team"], row["ft_home"], row["ft_away"],
-            row.get("home_new", False), row.get("away_new", False))
+def _float(value):
+    return None if value is None else float(value)
+
+
+def training_tuple(row: dict) -> TrainingMatch:
+    return TrainingMatch(row["kickoff_utc"], row["home_team"], row["away_team"], row["ft_home"], row["ft_away"],
+                         row.get("home_new", False), row.get("away_new", False), row.get("home_sot"),
+                         row.get("away_sot"), row.get("red_cards", 0), _float(row.get("home_rest_days")),
+                         _float(row.get("away_rest_days")))
 
 
 def blocks(targets: list[dict]) -> list[tuple[datetime, list[dict]]]:
@@ -103,7 +116,9 @@ def walk_forward(rows: list[dict], make_model, eval_seasons: list[str]) -> list[
                 prediction["withheld_reason"] = f"INSUFFICIENT_TRAINING_DATA(<{MIN_TRAINING_MATCHES})"
             else:
                 prediction["probabilities"] = model.predict(row["home_team"], row["away_team"],
-                                                            row.get("home_new", False), row.get("away_new", False))
+                                                            row.get("home_new", False), row.get("away_new", False),
+                                                            _float(row.get("home_rest_days")),
+                                                            _float(row.get("away_rest_days")))
             predictions.append(prediction)
     return predictions
 
@@ -154,7 +169,8 @@ def dataset_hash(rows: list[dict]) -> str:
     digest = hashlib.sha256()
     for row in sorted(rows, key=lambda row: row["match_id"]):
         digest.update(repr((row["match_id"], row["season"], row["kickoff_utc"].isoformat(), row["home_team"],
-                            row["away_team"], row["ft_home"], row["ft_away"], row["result"])).encode())
+                            row["away_team"], row["ft_home"], row["ft_away"], row["result"],
+                            row.get("home_sot"), row.get("away_sot"), row.get("red_cards"))).encode())
     digest.update(AVAILABILITY_RULE.encode())
     return digest.hexdigest()
 
@@ -217,6 +233,29 @@ def cross_fit_temperature(predictions: list[dict]) -> tuple[list[dict], dict]:
     return calibrated, temperatures
 
 
+def fit_market_weight(predictions: list[dict], markets: dict) -> float:
+    """검증 예측과 시장 확률을 섞을 때 로그 손실이 가장 낮은 시장 비중. 같으면 0.5에 가까운 쪽."""
+    scored = [item for item in predictions if item["probabilities"] is not None and markets.get(item["match_id"])]
+    if not scored:
+        return 1.0
+    losses = {weight: sum(log_loss(blend(item["probabilities"], markets[item["match_id"]], weight), item["result"])
+                          for item in scored) for weight in MARKET_WEIGHT_GRID}
+    return min(losses, key=lambda weight: (losses[weight], abs(weight - 0.5)))
+
+
+def blend_predictions(predictions: list[dict], markets: dict, weight_for) -> list[dict]:
+    """예측마다 시장 확률과 섞는다. 시장 확률이 없으면 확률 없이 보류(MARKET_ODDS_MISSING)."""
+    blended = []
+    for item in predictions:
+        market = markets.get(item["match_id"])
+        if item["probabilities"] is None or market is None:
+            blended.append({**item, "probabilities": None,
+                            "withheld_reason": item["withheld_reason"] or "MARKET_ODDS_MISSING"})
+        else:
+            blended.append({**item, "probabilities": blend(item["probabilities"], market, weight_for(item))})
+    return blended
+
+
 def fit_temperature(predictions: list[dict]) -> float:
     """검증 예측의 로그 손실이 가장 낮아지는 보정 계수. 1이면 보정하지 않는 것과 같다."""
     scored = [item for item in predictions if item["probabilities"] is not None]
@@ -234,32 +273,43 @@ def run(rows: list[dict], conn: psycopg.Connection | None = None) -> dict:
     rows_by_id = {row["match_id"]: row for row in rows}
     data_hash = dataset_hash(rows)
     report = {"seasons": roles, "dataset_hash": data_hash, "validation": {}, "test": {}}
-    chosen = {}   # 계열 → (만드는 함수, 검증 예측)
+    chosen = {}   # 계열 → (만드는 함수, 검증 예측(점수를 매긴 그대로), 시험 예측)
+
+    def record(purpose, model, seasons, predictions):
+        summary = summarize(predictions, rows_by_id)
+        if conn is not None:
+            run_id, created = store_run(conn, model, purpose, seasons, data_hash, summary, predictions)
+            summary["run_id"], summary["newly_stored"] = run_id, created
+        return summary
 
     def test_once(family, make_model, version):
         predictions = walk_forward(rows, make_model, roles["test"])
-        summary = summarize(predictions, rows_by_id)
-        if conn is not None:
-            run_id, created = store_run(conn, make_model(), "TEST", roles["test"], data_hash, summary, predictions)
-            summary["run_id"], summary["newly_stored"] = run_id, created
-        report["test"][family] = {"model_version": version, **summary}
+        report["test"][family] = {"model_version": version, **record("TEST", make_model(), roles["test"], predictions)}
+        return predictions
 
-    for family, makers in candidates().items():
+    def select(family, makers):
         tried = []
         for make_model in makers:
             predictions = walk_forward(rows, make_model, roles["validation"])
-            summary = summarize(predictions, rows_by_id)
-            model = make_model()
-            if conn is not None:
-                store_run(conn, model, "VALIDATION", roles["validation"], data_hash, summary, predictions)
-            tried.append((summary["overall"].get("log_loss", math.inf), model.version, make_model, predictions))
+            summary = record("VALIDATION", make_model(), roles["validation"], predictions)
+            tried.append((summary["overall"].get("log_loss", math.inf), make_model().version, make_model, predictions))
         best_loss, best_version, best_maker, best_predictions = min(tried, key=lambda item: item[0])
-        chosen[family] = (best_maker, best_predictions)
         report["validation"][family] = {"tried": len(tried), "chosen": best_version, "log_loss": best_loss}
-        test_once(family, best_maker, best_version)
+        chosen[family] = (best_maker, best_predictions, test_once(family, best_maker, best_version))
+
+    for family, makers in candidates().items():
+        select(family, makers)
+
+    # 3g: 경기 기록 옵션. poisson에서 고른 ridge·반감기를 그대로 쓴다.
+    poisson_params = chosen["poisson"][0]().params
+    select("poisson_plus", [
+        lambda w=w, r=r, e=e, p=poisson_params: PoissonModel(name="poisson_plus", ridge=p["ridge"],
+                                                             half_life_days=p["half_life_days"], shot_weight=w,
+                                                             red_card_weight=r, rest_effect=e)
+        for w in SHOT_WEIGHT_GRID for r in RED_CARD_WEIGHT_GRID for e in REST_EFFECT_GRID])
 
     for family, base in CALIBRATED_FROM.items():
-        base_maker, base_predictions = chosen[base]
+        base_maker, base_predictions, _ = chosen[base]
         temperature = fit_temperature(base_predictions)   # 시험·운영에 쓰는 계수: 검증 시즌 전체로
         calibrated, fold_temperatures = cross_fit_temperature(base_predictions)   # 검증 점수용: 교차 보정
         params = {**base_maker().params, "temperature": temperature, "calibration": CALIBRATION_METHOD}
@@ -267,15 +317,29 @@ def run(rows: list[dict], conn: psycopg.Connection | None = None) -> dict:
         def make_model(family=family, params=params):
             return model_from_params(family, params)
 
-        summary = summarize(calibrated, rows_by_id)
-        summary["fold_temperatures"] = fold_temperatures
-        if conn is not None:
-            store_run(conn, make_model(), "VALIDATION", roles["validation"], data_hash, summary, calibrated)
+        summary = record("VALIDATION", make_model(), roles["validation"], calibrated)
         version = make_model().version
         report["validation"][family] = {"tried": len(TEMPERATURE_GRID), "chosen": version, "temperature": temperature,
                                         "fold_temperatures": fold_temperatures,
                                         "log_loss": summary["overall"].get("log_loss")}
-        test_once(family, make_model, version)
+        chosen[family] = (make_model, calibrated, test_once(family, make_model, version))
+
+    # 3g: 시장 결합. 시장 확률(마감 전 평균 배당)이 없는 계열 중 검증 점수가 가장 좋은 모델을 출발점으로 쓴다.
+    markets = {row["match_id"]: market_probabilities(row, "pre") for row in rows}
+    base_family = min((family for family in chosen if family != "base_rate"),
+                      key=lambda family: report["validation"][family]["log_loss"])
+    base_maker, base_validation, base_test = chosen[base_family]
+    seasons = sorted({item["season"] for item in base_validation})
+    fold_weights = {season: fit_market_weight([i for i in base_validation if i["season"] != season], markets)
+                    for season in seasons}
+    weight = fit_market_weight(base_validation, markets)
+    model = MarketBlendModel(base=base_maker(), market_weight=weight, calibration=CALIBRATION_METHOD)
+    validation = blend_predictions(base_validation, markets, lambda item: fold_weights[item["season"]])
+    summary = record("VALIDATION", model, roles["validation"], validation)
+    report["validation"]["market_blend"] = {"base": base_family, "chosen": model.version, "market_weight": weight,
+                                            "fold_weights": fold_weights, "log_loss": summary["overall"].get("log_loss")}
+    test = blend_predictions(base_test, markets, lambda item: weight)
+    report["test"]["market_blend"] = {"model_version": model.version, **record("TEST", model, roles["test"], test)}
     return report
 
 
@@ -285,7 +349,7 @@ def main(argv=None) -> None:
     args = parser.parse_args(argv)
     with connect(load_settings()) as conn:
         migrate(conn)
-        rows = load_dataset(conn, finished_only=False)
+        rows = attach_stats(load_dataset(conn, finished_only=False), load_match_stats(conn))
         report = run(rows, None if args.no_store else conn)
     print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
 

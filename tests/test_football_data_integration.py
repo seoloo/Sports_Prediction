@@ -82,3 +82,21 @@ def test_odds_history_is_immutable(prepared):
     run(s, aliases, CSV_FIXTURE, "2025-12-27T00:00:00+00:00")
     with psycopg.connect(s.postgres_conninfo) as conn, pytest.raises(psycopg.errors.RaiseException):
         conn.execute("UPDATE silver.odds_revisions SET price = 9")
+
+
+def test_match_stats_are_versioned_only_when_they_change(prepared):
+    s, aliases, tmp = prepared
+    header = "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,HS,AS,HST,AST,HR,AR\n"
+    path = tmp / "E0_2025-26.csv"
+    path.write_text(header + "E0,16/08/2025,15:00,Alpha,Beta,2,1,14,9,6,3,0,1\n", encoding="utf-8")
+    first = run(s, aliases, path, "2025-08-17T00:00:00+00:00")
+    again = run(s, aliases, path, "2025-08-18T00:00:00+00:00")
+    assert (first["stats"], first["stats_new"], again["stats_new"]) == (1, 1, 0)
+    path.write_text(header + "E0,16/08/2025,15:00,Alpha,Beta,2,1,15,9,6,3,0,1\n", encoding="utf-8")   # 슈팅 정정
+    assert run(s, aliases, path, "2025-08-19T00:00:00+00:00")["stats_new"] == 1
+    assert query(s, "SELECT revision_no, home_shots FROM silver.match_stats_revisions ORDER BY revision_no") == [
+        (1, 14), (2, 15)]
+    # 기준 시각 함수: 정정 전 시점에는 1번 버전
+    assert query(s, "SELECT home_shots FROM silver.match_stats_known_at('2025-08-18T12:00:00+00')") == [(14,)]
+    with psycopg.connect(s.postgres_conninfo) as conn, pytest.raises(psycopg.errors.RaiseException):
+        conn.execute("UPDATE silver.match_stats_revisions SET home_shots = 0")

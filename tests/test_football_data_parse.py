@@ -105,3 +105,22 @@ def test_landing_files_and_alias_file(tmp_path):
     assert len(co_uk) == 29 and len({row["alias"] for row in co_uk}) == 29
     assert {"alias": "Nott'm Forest", "canonical_name": "Nottingham Forest FC"}.items() <= next(
         row for row in aliases if row["alias"] == "Nott'm Forest").items()
+
+
+STATS_CSV = ("Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,HS,AS,HST,AST,HR,AR\n"
+             "E0,16/08/2025,15:00,Alpha,Beta,2,1,14,9,6,3,0,1\n"
+             "E0,17/08/2025,15:00,Gamma,Delta,0,0,8,7,9,2,0,0\n"      # 유효 슈팅 9 > 슈팅 8: 원본 오류
+             "E0,18/08/2025,15:00,Beta,Gamma,,,,,,,,\n"               # 아직 안 열린 경기
+             "E0,19/08/2025,15:00,Delta,Alpha,1,1,10,x,4,4,0,0\n")    # 숫자가 아닌 값
+
+
+def test_match_stats_are_parsed_and_checked():
+    fixtures, issues = parse_csv(STATS_CSV.encode(), division="E0")
+    by_pair = {(f.home, f.away): f for f in fixtures}
+    assert by_pair[("Alpha", "Beta")].stats == {"home_shots": 14, "away_shots": 9, "home_shots_on_target": 6,
+                                                "away_shots_on_target": 3, "home_red_cards": 0, "away_red_cards": 1}
+    assert by_pair[("Gamma", "Delta")].stats is None and by_pair[("Beta", "Gamma")].stats is None
+    assert by_pair[("Delta", "Alpha")].stats is None
+    assert sorted(issue.issue_code for issue in issues) == ["INCONSISTENT_STAT", "INVALID_STAT"]
+    # 기록 열이 없는 옛 형식 파일은 기록 없이(None) 그대로 읽는다.
+    assert all(fixture.stats is None for fixture in fixtures_by_pair()[0].values())
