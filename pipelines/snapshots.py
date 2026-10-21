@@ -4,7 +4,8 @@ Airflow DAG(prematch_snapshots)가 30분마다 run()을 부른다.
 - 경기마다 T-24H, T-3H, T-1H 세 시점이 있다. 시점이 지났고 아직 기록이 없으면:
   - 시점에서 GRACE(90분) 안이면 지금 알려진 입력으로 스냅샷을 찍는다(TAKEN).
   - 그보다 늦었으면 MISSED로만 남긴다. 늦게 찍은 스냅샷은 "그 시점의 입력"이 아니기 때문이다.
-- 이미 시작한 경기는 건너뛴다.
+- 최근 7일 안에 이미 시작한 경기도 살펴, 기록이 없는 시점을 모두 MISSED로 남긴다.
+  PC가 경기 당일 내내 꺼져 있었던 경우에도 "놓쳤다"는 사실이 기록되게 하기 위해서다(시작 뒤에는 찍지 않는다).
 입력(build_inputs): 경기 정보, 양 팀 최근 5경기 결과, 그 경기의 배당. 모두 as_of 시점에 알려진 버전만 쓴다.
 아직 모델이 없으므로 확률은 만들지 않는다. 스냅샷은 나중에 모델을 "그때의 입력"으로 평가하는 데 쓴다.
 """
@@ -20,7 +21,8 @@ from .db import connect, migrate
 
 OFFSETS = {"T-24H": timedelta(hours=24), "T-3H": timedelta(hours=3), "T-1H": timedelta(hours=1)}
 GRACE = timedelta(minutes=90)
-LOOKAHEAD = timedelta(hours=25)
+LOOKAHEAD = timedelta(hours=25)        # 앞으로 이 시간 안에 시작하는 경기를 살핀다
+MISS_LOOKBACK = timedelta(days=7)      # 이미 시작한 경기는 이 기간까지 거슬러 MISSED를 채운다
 FORM_MATCHES = 5
 
 # 기준 시각에 알려진 경기 정보. football-data.org 버전이 있으면 우선하고, 없으면 openfootball(dbt stg_matches_known과 같은 규칙).
@@ -47,9 +49,12 @@ KNOWN_FIXTURES_SQL = """
 
 
 def decide(kickoff: datetime, now: datetime, already_recorded: set[str]) -> dict[str, str]:
-    """경기 하나에 대해 지금 해야 할 일 {시점 이름: "TAKE" 또는 "MISS"}. DB를 쓰지 않는 순수 함수."""
+    """경기 하나에 대해 지금 해야 할 일 {시점 이름: "TAKE" 또는 "MISS"}. DB를 쓰지 않는 순수 함수.
+
+    이미 시작한 경기는 남은 시점을 모두 MISS로 돌려준다. 시작 뒤에 찍으면 경기 중·후 정보가 섞이기 때문이다.
+    """
     if kickoff <= now:
-        return {}
+        return {label: "MISS" for label in OFFSETS if label not in already_recorded}
     actions = {}
     for label, before in OFFSETS.items():
         due = kickoff - before
@@ -107,14 +112,16 @@ def inputs_hash(inputs: dict) -> str:
 def run(*, now: datetime | None = None, settings=None) -> dict:
     """해야 할 스냅샷을 찍거나 MISSED로 기록하고 건수를 돌려준다. 같은 시각에 다시 불러도 새로 기록하지 않는다(멱등)."""
     now = now or datetime.now(timezone.utc)
-    counts = {"TAKEN": 0, "MISSED": 0, "upcoming_matches": 0}
+    counts = {"TAKEN": 0, "MISSED": 0, "upcoming_matches": 0, "recently_started_matches": 0}
     with connect(settings or load_settings()) as conn:
         migrate(conn)
         with conn.transaction():
-            upcoming = [row for row in conn.execute(KNOWN_FIXTURES_SQL, {"as_of": now}).fetchall()
-                        if row[5] is not None and now < row[5] <= now + LOOKAHEAD and row[6] == "SCHEDULED"]
-            counts["upcoming_matches"] = len(upcoming)
-            for row in upcoming:
+            fixtures = [row for row in conn.execute(KNOWN_FIXTURES_SQL, {"as_of": now}).fetchall() if row[5] is not None]
+            # 곧 시작할 예정 경기 + 최근 7일 안에 시작한 경기(연기·취소된 경기는 새 일정이 잡히면 다시 살핀다)
+            upcoming = [row for row in fixtures if now < row[5] <= now + LOOKAHEAD and row[6] == "SCHEDULED"]
+            started = [row for row in fixtures if now - MISS_LOOKBACK < row[5] <= now and row[6] != "NOT_PLAYED"]
+            counts["upcoming_matches"], counts["recently_started_matches"] = len(upcoming), len(started)
+            for row in upcoming + started:
                 match_id, kickoff = row[0], row[5]
                 recorded = {label for (label,) in conn.execute(
                     "SELECT offset_label FROM snapshots.prematch_inputs WHERE match_id=%s", (match_id,))}

@@ -18,7 +18,8 @@ KICKOFF = datetime(2026, 5, 24, 15, 0, tzinfo=timezone.utc)  # 예시 원본의 
     (KICKOFF - timedelta(hours=2, minutes=30), set(), {"T-24H": "MISS", "T-3H": "TAKE"}),
     (KICKOFF - timedelta(hours=2, minutes=30), {"T-24H"}, {"T-3H": "TAKE"}),
     (KICKOFF - timedelta(minutes=30), {"T-24H", "T-3H"}, {"T-1H": "TAKE"}),
-    (KICKOFF, set(), {}),                                                          # 시작 이후는 건너뜀
+    (KICKOFF, {"T-24H", "T-3H"}, {"T-1H": "MISS"}),                                 # 시작 이후에는 찍지 않고 MISS
+    (KICKOFF + timedelta(days=1), set(), {"T-24H": "MISS", "T-3H": "MISS", "T-1H": "MISS"}),
 ])
 def test_decide(now, recorded, expected):
     assert snapshots.decide(KICKOFF, now, recorded) == expected
@@ -38,12 +39,14 @@ def rows(s):
 def test_snapshots_are_taken_once_missed_ones_are_not_backfilled(season):
     s = season
     first = KICKOFF - timedelta(hours=2, minutes=30)
-    assert snapshots.run(now=first, settings=s) == {"TAKEN": 1, "MISSED": 1, "upcoming_matches": 1}
+    assert snapshots.run(now=first, settings=s) == {"TAKEN": 1, "MISSED": 1, "upcoming_matches": 1,
+                                                    "recently_started_matches": 0}
     assert rows(s) == [("T-24H", "MISSED", False), ("T-3H", "TAKEN", True)]
-    assert snapshots.run(now=first, settings=s) == {"TAKEN": 0, "MISSED": 0, "upcoming_matches": 1}  # 멱등
+    assert snapshots.run(now=first, settings=s)["TAKEN"] == 0  # 멱등: 같은 시각에 다시 불러도 새 기록 없음
     snapshots.run(now=KICKOFF - timedelta(minutes=40), settings=s)
     assert rows(s)[-1] == ("T-1H", "TAKEN", True)
-    assert snapshots.run(now=KICKOFF + timedelta(minutes=5), settings=s)["upcoming_matches"] == 0  # 시작 후
+    after = snapshots.run(now=KICKOFF + timedelta(minutes=5), settings=s)  # 시작 후: 세 시점 모두 기록돼 할 일 없음
+    assert (after["upcoming_matches"], after["recently_started_matches"], after["TAKEN"], after["MISSED"]) == (0, 1, 0, 0)
     with psycopg.connect(s.postgres_conninfo) as conn, pytest.raises(psycopg.errors.RaiseException):
         conn.execute("UPDATE snapshots.prematch_inputs SET status='TAKEN'")
 
@@ -62,3 +65,17 @@ def test_inputs_use_only_what_was_known_and_are_deterministic(season):
     assert [(f["opponent"], f["venue"], f["goals_for"], f["goals_against"]) for f in inputs["home_form"]] == [("Gamma FC", "AWAY", 0, 0)]
     assert [(f["opponent"], f["venue"], f["goals_for"]) for f in inputs["away_form"]] == [("Beta FC", "HOME", 2)]
     assert inputs["odds"] == []
+
+
+def test_matches_missed_while_the_system_was_off_are_recorded(season):
+    """경기 당일 내내 꺼져 있다가 다시 켜도, 7일 안에 시작한 경기의 시점은 모두 MISSED로 남는다."""
+    s = season
+    assert snapshots.run(now=KICKOFF + timedelta(hours=10), settings=s)["MISSED"] == 3
+    assert rows(s) == [("T-24H", "MISSED", False), ("T-3H", "MISSED", False), ("T-1H", "MISSED", False)]
+    assert snapshots.run(now=KICKOFF + timedelta(hours=11), settings=s)["MISSED"] == 0  # 멱등
+
+
+def test_matches_older_than_the_lookback_are_left_alone(season):
+    s = season
+    assert snapshots.run(now=KICKOFF + timedelta(days=8), settings=s)["MISSED"] == 0
+    assert rows(s) == []
