@@ -165,3 +165,56 @@ def test_inject_faults_is_deterministic_and_puts_late_events_after_results():
             late -= 1
     assert late == 0
     assert inject_faults(ordered, seed=3, duplicate_rate=0, late_rate=0) == (ordered, 0, 0)
+
+
+class SlowJoinConsumer:
+    """처음 join_polls번은 파티션 배정 전(빈 응답)이고, 그 뒤 메시지 없이 빈 응답만 주는 가짜 소비자."""
+    def __init__(self, join_polls):
+        self.join_polls, self.polls, self.closed = join_polls, 0, False
+
+    def consume(self, num_messages, timeout):
+        self.polls += 1
+        return []
+
+    def assignment(self):
+        return ["partition-0"] if self.join_polls is not None and self.polls > self.join_polls else []
+
+    def close(self):
+        self.closed = True
+
+
+class NoTransactionConnection:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def transaction(self):
+        return self
+
+
+def offline_consumer_run(monkeypatch, fake, **kwargs):
+    """Kafka·DB 없이 match_consumer.run의 반복만 돌린다."""
+    from pipelines.streaming import match_consumer
+    monkeypatch.setattr(match_consumer.kafka_io, "ensure_topics", lambda *a, **k: None)
+    monkeypatch.setattr(match_consumer.kafka_io, "consumer", lambda *a, **k: fake)
+    monkeypatch.setattr(match_consumer, "connect", lambda *a, **k: NoTransactionConnection())
+    monkeypatch.setattr(match_consumer, "migrate", lambda conn: [])
+    monkeypatch.setattr(match_consumer, "sync_aliases", lambda *a, **k: None)
+    monkeypatch.setattr(match_consumer, "load_alias_file", lambda path: [])
+    return match_consumer.run(topics=["t"], settings=object(), until_idle=True, idle_polls=3, **kwargs)
+
+
+def test_idle_polls_are_counted_only_after_partitions_are_assigned(monkeypatch):
+    # 느린 CI에서 실제로 일어난 일: 그룹 배정 중의 빈 응답 3번을 "다 읽음"으로 보고 메시지를 하나도 안 읽고 끝남.
+    fake = SlowJoinConsumer(join_polls=6)
+    assert offline_consumer_run(monkeypatch, fake) == {}
+    assert fake.polls == 6 + 3 and fake.closed
+
+
+def test_consumer_fails_loudly_when_never_assigned(monkeypatch):
+    from pipelines.streaming import match_consumer
+    monkeypatch.setattr(match_consumer, "ASSIGNMENT_TIMEOUT_SECONDS", 0)
+    with pytest.raises(TimeoutError, match="배정"):
+        offline_consumer_run(monkeypatch, SlowJoinConsumer(join_polls=None))

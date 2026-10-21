@@ -12,6 +12,7 @@
 import argparse
 import hashlib
 import json
+import time
 from datetime import datetime, timezone
 
 import psycopg
@@ -97,13 +98,22 @@ def dispatch_handler(topic: str, settings=None):
     return handle_match_event
 
 
+ASSIGNMENT_TIMEOUT_SECONDS = 30   # until_idle 모드에서 파티션 배정을 기다리는 최대 시간
+
+
 def run(*, topics=None, group_id: str = GROUP_ID, settings=None, until_idle: bool = False, idle_polls: int = 5,
         handler=None, alias_file=ALIAS_FILE) -> dict:
-    """토픽을 읽어 Silver에 반영한다. until_idle=True이면 새 메시지가 idle_polls번 연속 없을 때 멈춘다(테스트·재생용)."""
+    """토픽을 읽어 Silver에 반영한다. until_idle=True이면 새 메시지가 idle_polls번 연속 없을 때 멈춘다(테스트·재생용).
+
+    빈 응답은 파티션을 배정받은 뒤부터 센다. 새 그룹은 배정까지 몇 초 걸려서, 그 사이의 빈 응답을 세면
+    메시지가 남아 있는데도 "다 읽었다"며 끝날 수 있다(느린 CI에서 실제로 발생). 배정이
+    ASSIGNMENT_TIMEOUT_SECONDS 안에 안 되면 조용히 끝내지 않고 오류를 낸다.
+    """
     settings = settings or load_settings()
     kafka_io.ensure_topics(settings)
     kafka_consumer = kafka_io.consumer(group_id, topics or TOPICS, settings)
     counts, empty_polls = {}, 0
+    assignment_deadline = time.monotonic() + ASSIGNMENT_TIMEOUT_SECONDS
     try:
         with connect(settings) as conn:
             migrate(conn)
@@ -112,6 +122,10 @@ def run(*, topics=None, group_id: str = GROUP_ID, settings=None, until_idle: boo
             while True:
                 messages = kafka_consumer.consume(num_messages=500, timeout=1.0)
                 if not messages:
+                    if not kafka_consumer.assignment():   # 아직 그룹 참여·파티션 배정 중
+                        if until_idle and time.monotonic() > assignment_deadline:
+                            raise TimeoutError(f"{ASSIGNMENT_TIMEOUT_SECONDS}초 안에 파티션을 배정받지 못했습니다: {topics}")
+                        continue
                     empty_polls += 1
                     if until_idle and empty_polls >= idle_polls:
                         break
