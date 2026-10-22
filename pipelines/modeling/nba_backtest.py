@@ -49,18 +49,21 @@ LABELS = {"base_rate": "단순 비율", "margin_rating": "점수 차 등급", "m
           "elo": "Elo"}
 
 
-def load_games(conn: psycopg.Connection) -> tuple[list[dict], dict]:
-    """끝난 NBA 경기를 시작 시각 순서로. 중립·연전 표시를 붙인다. (행, 제외 건수)."""
+def load_games(conn: psycopg.Connection, as_of: datetime | None = None) -> tuple[list[dict], dict]:
+    """as_of(기본: 지금)에 알려진 끝난 NBA 경기를 시작 시각 순서로. 중립·연전 표시를 붙인다. (행, 제외 건수).
+
+    경기 전 예측(5d-d)은 as_of = 스냅샷 시각으로 불러, 그때 실제로 받아 둔 결과만 쓴다.
+    """
     schedule = defaultdict(set)   # 팀 → 경기 날짜(미국 동부). 연전 판단용. 일정은 경기 전에 공개된다
     rows, excluded = [], {"no_tipoff": 0}
     for (game_id, season, postseason, tipoff, local_date, home, away, home_score, away_score,
          status) in conn.execute("""
             SELECT g.game_id, g.season, g.postseason, k.tipoff_utc, k.local_date, h.canonical_name, a.canonical_name,
                    k.home_score, k.away_score, k.status
-            FROM silver.games g JOIN silver.game_revisions_known_at(now()) k USING (game_id)
+            FROM silver.games g JOIN silver.game_revisions_known_at(COALESCE(%s, now())) k USING (game_id)
             JOIN silver.teams h ON h.team_id = g.home_team_id JOIN silver.teams a ON a.team_id = g.away_team_id
             WHERE g.competition_code = %s AND k.status <> 'POSTPONED'
-            ORDER BY k.tipoff_utc NULLS LAST, g.game_id""", (COMPETITION,)).fetchall():
+            ORDER BY k.tipoff_utc NULLS LAST, g.game_id""", (as_of, COMPETITION)).fetchall():
         schedule[home].add(local_date)
         schedule[away].add(local_date)
         if status != "FINISHED":

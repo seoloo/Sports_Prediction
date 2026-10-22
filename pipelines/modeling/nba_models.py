@@ -187,3 +187,15 @@ class EloModel:
     def predict(self, game: Game) -> float:
         return _clip(self._home_probability(self._rating(game.home, game.season), self._rating(game.away, game.season),
                                             game.neutral))
+
+
+def model_from_params(name: str, params: dict):
+    """저장된 실행의 이름·하이퍼파라미터로 같은 모델을 만든다(경기 전 예측, 5d-d). 버전 비교는 부르는 쪽이 한다."""
+    if name == "base_rate":
+        return BaseRateModel()
+    if name in ("margin_rating", "margin_rating_rest"):
+        return MarginRatingModel(name=name, ridge=params["ridge"], half_life_days=params["half_life_days"],
+                                 rest_effect=bool(params.get("rest_effect")))
+    if name == "elo":
+        return EloModel(k=params["k"], home=params["home"], carryover=params["carryover"])
+    raise ValueError(f"알 수 없는 NBA 모델: {name}")

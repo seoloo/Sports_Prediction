@@ -24,7 +24,8 @@ PREMATCH_STALE_AFTER = timedelta(hours=24)   # 시작한 지 하루가 지난 �
 OFFSET_LABEL = {"T-24H": "24시간 전", "T-3H": "3시간 전", "T-1H": "1시간 전"}
 REASON_LABEL = {"MODEL_NOT_VALIDATED": "모델 미검증", "LOW_TEAM_HISTORY(<5)": "팀 기록 부족",
                 "INSUFFICIENT_TRAINING_DATA(<100)": "학습 자료 부족", "NO_ACTIVE_MODEL": "활성 모델 없음",
-                "MODEL_CODE_CHANGED": "평가받지 않은 모델 코드", "LEAGUE_NOT_MODELED": "이 리그 모델 없음"}
+                "MODEL_CODE_CHANGED": "평가받지 않은 모델 코드", "LEAGUE_NOT_MODELED": "이 리그 모델 없음",
+                "INSUFFICIENT_TRAINING_DATA(<200)": "학습 자료 부족"}
 WEEKDAYS = "월화수목금토일"
 log = logging.getLogger(__name__)
 
@@ -107,16 +108,64 @@ def prematch_text(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def pending_nba_prematch(conn: psycopg.Connection, now: datetime) -> list[dict]:
+    """NBA 스냅샷 중 아직 알리지 않은 것(5d-d). 알림 키는 nba:경기:시점으로 축구와 겹치지 않는다."""
+    rows = conn.execute("""
+        SELECT i.game_id, i.offset_label, i.status, i.tipoff_utc, h.canonical_name, a.canonical_name,
+               p.display_status, p.withheld_reasons, p.prob_home,
+        FROM snapshots.game_prematch_inputs i
+        JOIN silver.games g USING (game_id)
+        JOIN silver.teams h ON h.team_id = g.home_team_id JOIN silver.teams a ON a.team_id = g.away_team_id
+        LEFT JOIN snapshots.game_prematch_predictions p USING (game_id, offset_label)
+        WHERE i.recorded_at > %s AND i.tipoff_utc > %s
+          AND NOT EXISTS (SELECT 1 FROM notify.sent_messages s WHERE s.kind = 'PREMATCH'
+                          AND s.notification_key = 'nba:' || i.game_id || ':' || i.offset_label)
+        ORDER BY i.tipoff_utc, i.game_id, i.due_at""", (now - PREMATCH_LOOKBACK, now - PREMATCH_STALE_AFTER)).fetchall()
+    keys = ("game_id", "offset_label", "status", "tipoff_utc", "home", "away", "display_status", "withheld_reasons",
+            "market_home", "market_away")
+    return [dict(zip(keys, row)) for row in rows]
+
+
+def nba_text(rows: list[dict]) -> str:
+    """NBA 알림. 놓친 시점은 줄마다 쓰지 않고 건수만(처음 켰을 때 이미 시작한 경기가 한꺼번에 놓침으로 잡힌다)."""
+    taken = [row for row in rows if row["status"] == "TAKEN"]
+    lines = [f"🏀 NBA 경기 전 스냅샷 {len(taken)}건"]
+    current = None
+    for row in taken:
+        if row["game_id"] != current:
+            current = row["game_id"]
+            lines += ["", f"{seoul(row['tipoff_utc'])} {row['home']} vs {row['away']}"]
+        label = OFFSET_LABEL[row["offset_label"]]
+        if row["display_status"] == "READY":
+            lines.append(f"· {label}: 홈 승 {float(row['prob_home']):.1%}")
+        elif row["display_status"] == "WITHHELD":
+            lines.append(f"· {label}: 찍음 · 예측 보류({reason_text(row['withheld_reasons'])})")
+        else:
+            lines.append(f"· {label}: 찍음 · 예측 기록 없음")
+        if row["value_status"]:
+            if row["value_status"] == "COMPARED":
+            if row["market_home"] is not None:
+                result["market"] = {"HOME": float(row["market_home"]), "AWAY": float(row["market_away"])}
+    missed = len(rows) - len(taken)
+    if missed:
+        lines += ["", f"놓친 시점 {missed}건(그 시각에 기록하지 못함)"]
+    return "\n".join(lines)
+
+
 def notify_prematch(*, now: datetime | None = None, settings=None, sender=None) -> dict:
-    """아직 알리지 않은 경기 전 스냅샷을 한 메시지로 보낸다. 없으면 보내지 않는다."""
+    """아직 알리지 않은 경기 전 스냅샷(축구·NBA)을 한 메시지로 보낸다. 없으면 보내지 않는다."""
     now, settings = now or datetime.now(timezone.utc), settings or load_settings()
     with connect(settings) as conn:
         migrate(conn)
-        rows = pending_prematch(conn, now)
-        if not rows:
+        rows, nba_rows = pending_prematch(conn, now), pending_nba_prematch(conn, now)
+        if not any(row["status"] == "TAKEN" for row in nba_rows):
+            nba_rows = []   # 놓친 시점만 있으면 보내지 않는다. 다음에 찍은 스냅샷을 알릴 때 건수로 함께 알린다
+        if not rows and not nba_rows:
             return {"status": "NOTHING_NEW", "kind": "PREMATCH", "items": 0}
-        keys = sorted({f"{row['match_id']}:{row['offset_label']}" for row in rows})
-        return deliver(conn, "PREMATCH", keys, prematch_text(rows), settings, now, sender)
+        keys = sorted({f"{row['match_id']}:{row['offset_label']}" for row in rows}
+                      | {f"nba:{row['game_id']}:{row['offset_label']}" for row in nba_rows})
+        parts = ([prematch_text(rows)] if rows else []) + ([nba_text(nba_rows)] if nba_rows else [])
+        return deliver(conn, "PREMATCH", keys, "\n\n".join(parts), settings, now, sender)
 
 
 def weekly_text(summary: dict) -> str:

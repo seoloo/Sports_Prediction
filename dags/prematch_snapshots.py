@@ -40,12 +40,21 @@ def prematch_snapshots():
         from pipelines import snapshots
         return snapshots.run()
 
-    @task
+    @task(trigger_rule="all_done")
+    def take_due_nba_snapshots():
+        from pipelines import nba_snapshots
+        return nba_snapshots.run()
+
+    @task(trigger_rule="all_done")   # 한 종목 스냅샷이 실패해도 다른 종목 알림은 보낸다
     def notify_snapshots():
         from pipelines.notify import alerts
         return alerts.notify_prematch()
 
-    [fetch_due_odds(), fetch_due_nba_odds()] >> take_due_snapshots() >> notify_snapshots()
+    odds = [fetch_due_odds(), fetch_due_nba_odds()]
+    snapshots_taken = [take_due_snapshots(), take_due_nba_snapshots()]
+    odds >> snapshots_taken[0]
+    odds >> snapshots_taken[1]
+    snapshots_taken >> notify_snapshots()
 
 
 prematch_snapshots()
