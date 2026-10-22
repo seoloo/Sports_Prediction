@@ -189,6 +189,16 @@ def weekly_text(summary: dict) -> str:
         lines.append("보류 사유: " + ", ".join(f"{reason_text([reason])} {count}"
                                             for reason, count in sorted(summary["withheld_reasons"].items())))
     value = summary.get("value")
+    nba = summary.get("nba")
+    if nba and nba.get("snapshots"):   # 5e: NBA 경기 전 예측 채점
+        lines += ["", "🏀 NBA"]
+        for label in ("T-24H", "T-3H", "T-1H"):
+            counts, week = nba["snapshots"].get(label, {}), nba["week"][label]
+            score = f" · 채점 {week['games']}경기 로그 손실 {week['log_loss']:.3f}" if week.get("games") else ""
+            market = week.get("vs_market_pre")
+            versus = f"(시장 {market['market_log_loss']:.3f})" if market else ""
+            lines.append(f"{OFFSET_LABEL[label]}: 찍음 {counts.get('TAKEN', 0)} · 놓침 {counts.get('MISSED', 0)}{score}{versus}")
+            v = nba["value"]
     return "\n".join(lines)
 
 

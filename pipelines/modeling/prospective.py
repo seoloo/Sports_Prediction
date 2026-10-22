@@ -25,6 +25,13 @@ from ..snapshots import KNOWN_FIXTURES_SQL
 from .backtest import OUTCOMES, brier, log_loss
 from ..leagues import MODELED
 from .models import TrainingMatch, model_from_params, promoted_by_season
+
+
+def nba_weekly(conn, start, end, as_of):
+    from .nba_prospective import weekly   # nba_prospective가 이 모듈을 불러오므로 여기서 불러온다
+    return weekly(conn, start, end, as_of)
+
+
 MIN_TRAINING_MATCHES = 100
 MIN_TEAM_HISTORY = 5          # 한 팀의 학습 경기가 이보다 적으면(승격 팀 시즌 초 등) 사유를 하나 더 붙인다
 MODE = "PROSPECTIVE"
@@ -250,7 +257,8 @@ def weekly_summary(conn: psycopg.Connection, week_start: date, as_of: datetime) 
             "week": {label: metrics([i for i in this_week if i["offset_label"] == label]) for label in ("T-24H", "T-3H", "T-1H")},
             "cumulative": {label: metrics([i for i in scored if i["offset_label"] == label]) for label in ("T-24H", "T-3H", "T-1H")},
             "league_models": {code: model and {"name": model["name"], "gate_status": model["gate_status"]}
-                              for code, model in leagues.items()}}
+                              for code, model in leagues.items()},
+            "nba": nba_weekly(conn, start, end, as_of)}   # 5e: NBA 경기 전 예측 채점(2지선다라 따로 센다)
 
 
 def store_weekly(conn: psycopg.Connection, summary: dict) -> tuple[int, bool]:
@@ -313,6 +321,18 @@ def render_weekly_markdown(summary: dict) -> str:
             market = result.get("vs_market_pre")
             versus = f"{market['matches']}, {market['model_log_loss']:.4f}, {market['market_log_loss']:.4f}" if market else "시장 배당 없음"
             lines.append(f"| {LABEL[label]} | {result['matches']} | {result['log_loss']:.4f} | {result['brier']:.4f} | {versus} |")
+    nba = summary.get("nba")
+    if nba:
+        model = nba.get("active_model")
+        lines += ["", "## NBA", "", "- 활성 모델: " + (f"`{model['model_version']}` (검증 상태 **{model['gate_status']}**)" if model else "없음"),
+                  "", "| 시점 | 찍음 | 놓침 | 이번 주 채점 | 누적 채점 | 누적 시장 비교(경기, 모델, 시장) |", "|---|---|---|---|---|---|"]
+        for label in ("T-24H", "T-3H", "T-1H"):
+            counts, week, total = nba["snapshots"].get(label, {}), nba["week"][label], nba["cumulative"][label]
+            score = lambda result: f"{result['games']}경기 {result['log_loss']:.4f}" if result["games"] else "0"
+            market = total.get("vs_market_pre")
+            versus = f"{market['games']}, {market['model_log_loss']:.4f}, {market['market_log_loss']:.4f}" if market else "—"
+            lines.append(f"| {LABEL[label]} | {counts.get('TAKEN', 0)} | {counts.get('MISSED', 0)} | {score(week)} | {score(total)} | {versus} |")
+        value = nba["value"]
     lines += ["", "경기 수가 적은 동안의 숫자는 크게 흔들립니다. 3c 기준처럼 300경기 이상 쌓이기 전에는 결론을 내리지 않습니다."]
     return "\n".join(lines) + "\n"
 

@@ -91,3 +91,18 @@ def test_missed_only_is_not_sent_alone(season):
     assert query(s, "SELECT count(*) FROM notify.sent_messages WHERE notification_key LIKE 'nba:%%'")[0][0] == 3
     again = alerts.notify_prematch(now=TIPOFF + timedelta(minutes=45), settings=s, sender=lambda *a: pytest.fail("중복"))
     assert again["status"] == "NOTHING_NEW"
+
+    final = {"id": 9999, "date": "2026-01-19", "datetime": "2026-01-20T00:30:00.000Z", "season": 2025, "status": "Final",
+             "status_state": "final", "period": 4, "postseason": False, "postponed": False, "home_team_score": 101,
+             "visitor_team_score": 108, "home_team": TEAMS[0], "visitor_team": TEAMS[1]}
+    bdl.ingest("2025-26", pages=[page([final])], settings=s, received_at=TIPOFF + timedelta(hours=4))
+    from pipelines.modeling import prospective
+    week = TIPOFF.date() - timedelta(days=TIPOFF.weekday())
+    before = prospective.run_weekly(now=TIPOFF + timedelta(hours=1), week_start=week, settings=s, store=False)
+    summary = prospective.run_weekly(now=TIPOFF + timedelta(days=1), week_start=week, settings=s, store=False)
+    assert before["nba"]["week"]["T-24H"] == {"games": 0}                      # 결과를 받기 전에는 채점하지 않는다
+    nba = summary["nba"]
+    assert nba["snapshots"]["T-1H"] == {"MISSED": 1} and nba["snapshots"]["T-24H"]["TAKEN"] == 1
+    week_24 = nba["week"]["T-24H"]
+    assert week_24["games"] == 1 and week_24["vs_market_pre"]["games"] == 1 and week_24["log_loss"] > 0
+    assert "🏀 NBA" in alerts.weekly_text(summary) and "## NBA" in prospective.render_weekly_markdown(summary)

@@ -88,3 +88,74 @@ def record_for_snapshot(conn: psycopg.Connection, game_id: int, offset_label: st
         with conn.transaction():
             insert_prediction(conn, game_id, offset_label, as_of, failed)
         return "FAILED"
+
+
+# ---- 경기 후 채점(주간 보고서의 NBA 절, 5e) ----
+
+OFFSET_LABELS = ("T-24H", "T-3H", "T-1H")
+
+
+def scored_predictions(conn: psycopg.Connection, as_of: datetime) -> list[dict]:
+    """확률이 있는 NBA 경기 전 예측과 as_of에 알려진 결과(끝난 경기만), 스냅샷에 들어 있던 해외 시장 확률."""
+    rows = conn.execute("""
+        SELECT p.game_id, p.offset_label, p.model_version, p.prob_home::float, i.tipoff_utc, i.inputs,
+               k.home_score, k.away_score
+        FROM snapshots.game_prematch_predictions p
+        JOIN snapshots.game_prematch_inputs i USING (game_id, offset_label)
+        JOIN silver.game_revisions_known_at(%s) k USING (game_id)
+        WHERE p.prob_home IS NOT NULL AND k.status = 'FINISHED'
+        ORDER BY i.tipoff_utc, p.game_id, p.offset_label""", (as_of,)).fetchall()
+    scored = []
+    for game_id, label, version, prob_home, tipoff, inputs, home_score, away_score in rows:
+        market, _ = market_fair(inputs.get("odds", []))
+        scored.append({"game_id": game_id, "offset_label": label, "tipoff_utc": tipoff, "model_version": version,
+                       "prob_home": prob_home, "result": "HOME" if home_score > away_score else "AWAY",
+                       "market_home": market["HOME"] if market else None})
+    return scored
+
+
+def metrics(items: list[dict]) -> dict:
+    from .nba_backtest import brier, log_loss
+    result = {"games": len(items)}
+    if items:
+        result["log_loss"] = round(sum(log_loss(i["prob_home"], i["result"]) for i in items) / len(items), 4)
+        result["brier"] = round(sum(brier(i["prob_home"], i["result"]) for i in items) / len(items), 4)
+        with_market = [i for i in items if i["market_home"] is not None]
+        if with_market:
+            result["vs_market_pre"] = {
+                "games": len(with_market),
+                "model_log_loss": round(sum(log_loss(i["prob_home"], i["result"]) for i in with_market) / len(with_market), 4),
+                "market_log_loss": round(sum(log_loss(i["market_home"], i["result"]) for i in with_market) / len(with_market), 4)}
+    return result
+
+
+    rows = conn.execute("""
+        SELECT DISTINCT ON (v.game_id) v.game_id, v.best_selection,
+        LEFT JOIN silver.game_revisions_known_at(%s) k USING (game_id)
+    picks = []
+        outcome = None if status != "FINISHED" else ("HOME" if home_score > away_score else "AWAY")
+                      "return": None if outcome is None else (float(price) - 1 if outcome == selection else -1.0)})
+    return picks
+
+
+def weekly(conn: psycopg.Connection, start: datetime, end: datetime, as_of: datetime) -> dict:
+    from collections import Counter, defaultdict
+    by_offset, reasons = defaultdict(Counter), Counter()
+    for label, status, display, withheld, has_probability in conn.execute("""
+            SELECT i.offset_label, i.status, p.display_status, p.withheld_reasons, p.prob_home IS NOT NULL
+            FROM snapshots.game_prematch_inputs i
+            LEFT JOIN snapshots.game_prematch_predictions p USING (game_id, offset_label)
+            WHERE i.tipoff_utc >= %s AND i.tipoff_utc < %s AND i.recorded_at <= %s""", (start, end, as_of)).fetchall():
+        by_offset[label][status] += 1
+        if status == "TAKEN":
+            by_offset[label]["PREDICTION_" + (display or "MISSING")] += 1
+            by_offset[label]["with_probabilities"] += int(bool(has_probability))
+            reasons.update(withheld or [])
+    scored = scored_predictions(conn, as_of)
+    this_week = [item for item in scored if start <= item["tipoff_utc"] < end]
+    active = active_model(conn, COMPETITION)
+    return {"active_model": active and {key: active[key] for key in ("name", "model_version", "run_id", "report_id", "gate_status")},
+            "snapshots": {label: dict(counts) for label, counts in sorted(by_offset.items())},
+            "withheld_reasons": dict(reasons),
+            "week": {label: metrics([i for i in this_week if i["offset_label"] == label]) for label in OFFSET_LABELS},
+            "cumulative": {label: metrics([i for i in scored if i["offset_label"] == label]) for label in OFFSET_LABELS},
