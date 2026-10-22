@@ -136,6 +136,7 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 | 리그 백테스트 | `.\.venv\Scripts\python.exe -m pipelines.modeling.backtest --competition de.1` |
 | 평가 보고서 | `.\.venv\Scripts\python.exe -m pipelines.modeling.evaluation --competition de.1 --markdown-dir docs/reports` |
 | 해외 배당 지금 받기(리그당 1크레딧) | `.\.venv\Scripts\python.exe -m pipelines.ingest.the_odds_api --force en.1` |
+| 앱 업데이트와 무관한 원격 제어 세션(휴대폰·웹·PowerShell에서 조작) | `.\scripts\start_remote_session.ps1` 다음 `claude attach Sports_Prediction` |
 | 텔레그램 시험 | `.\.venv\Scripts\python.exe -m pipelines.notify.telegram test` |
 | Spark 재계산·대조 | `docker compose --env-file .env -f infra/docker-compose.yml --profile spark run --rm spark-features` |
 | 과거 배당 CSV 반영(직접 받은 파일, `data/landing/football-data-co-uk/`) | `.\.venv\Scripts\python.exe -m pipelines.ingest.football_data_co_uk` |
