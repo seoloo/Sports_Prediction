@@ -79,7 +79,6 @@
 - **추측하지 않는다.** 결측은 NULL, 팀 연결은 대조표로만, 소스끼리 다르면 덮지 않고 기록.
 - **계보.** 각 버전이 `raw_file_id`로 Bronze 원본을 가리킨다.
 
-경기 전 스냅샷(`snapshots.prematch_inputs`, 30행)과 스냅샷 순간의 모델 예측(`snapshots.prematch_predictions`, 3d, 첫 기록 10/22 예정)은 Silver 옆의 별도 스키마입니다. 그 시점의 입력을 얼려 두는 증거라 Silver처럼 수정할 수 없고, Gold처럼 다시 만들지도 않습니다.
 
 
 알림 발송 기록(`notify.sent_messages`, 4b)은 데이터 층이 아니라 운영 기록입니다. 같은 알림을 두 번 보내지 않기 위한 장부라 본문 없이 해시만 남깁니다.

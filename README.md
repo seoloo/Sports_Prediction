@@ -125,7 +125,7 @@ docker compose --env-file .env -f infra/docker-compose.yml exec airflow cat /opt
 | Airflow DAG | 주기 | 하는 일 |
 |---|---|---|
 | `openfootball_epl_daily` | 매일 06:00 UTC | 다섯 리그 × 이전·현재 시즌 수집 → dbt build → Spark 대조 |
-| `prematch_snapshots` | 30분마다 | 축구 경기 24·1시간 전, NBA 그날 첫 경기 1시간 전 해외 배당 수집 → 축구 24·3·1시간 전 스냅샷·예측 기록·배당 가치 → 텔레그램 |
+| `prematch_snapshots` | 30분마다 | 축구 경기 24·1시간 전, NBA 그날 첫 경기 1시간 전 해외 배당 수집 → 축구·NBA 24·3·1시간 전 스냅샷·예측 기록·배당 가치 → 텔레그램 |
 | `weekly_model_report` | 화요일 06:00 UTC | 경기 후 채점, 주간 보고서, 텔레그램 |
 | `balldontlie_nba_daily` | 매일 12:00 UTC | NBA 현재 시즌 일정·결과(바뀐 경기만 새 버전) |
 
@@ -170,7 +170,7 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 
 - **모델은 아직 검증되지 않았습니다.** EPL은 시장 배당보다 부정확했고, 다른 네 리그는 과거 배당이 없어 비교하지 못했습니다. The Odds API로 쌓이는 경기 전 배당으로 앞으로 비교합니다.
 - **경기 기록(슈팅·퇴장)은 EPL만 있습니다.** 라인업·부상 정보는 쓰지 않습니다.
-- **NBA는 결과·배당·모델 평가까지 있습니다(5d-a~c).** 경기 전 기록·알림(5d-d)이 남았습니다. 과거 NBA 배당은 없어 시장 비교는 앞으로 쌓이는 배당으로만 합니다.
+- **NBA도 축구와 같은 흐름이 돕니다(5d-a~d).** 과거 NBA 배당이 없어 시장 비교는 앞으로 쌓이는 경기 전 배당으로만 합니다. 주간 채점 보고서는 아직 축구만입니다.
 - **미니 PC 상시 운영(4c)**은 장비 도입 후입니다.
 
 Football data provided by the Football-Data.org API.

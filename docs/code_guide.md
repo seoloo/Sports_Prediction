@@ -56,6 +56,7 @@
 | [pipelines/modeling/evaluation.py](../pipelines/modeling/evaluation.py) | 저장된 시험 예측 평가: 블록 부트스트랩, 확률 보정, 약한 곳, 검증 기준, 보고서 저장·Markdown 생성(3c) | `block_bootstrap`, `calibration`, `segments`, `gate`, `render_markdown` |
 | [pipelines/modeling/nba_models.py](../pipelines/modeling/nba_models.py) | NBA 2지선다 모델(5d-c): 단순 비율, 점수 차 등급(가중 ridge + Φ), Elo(이어서 갱신) | `Game`, `MarginRatingModel`, `EloModel` |
 | [pipelines/modeling/nba_backtest.py](../pipelines/modeling/nba_backtest.py) | NBA 백테스트·평가(5d-c): 버블·연전 표시, 주 블록 walk-forward(+4시간), 격자 선택, 보정·부트스트랩·보고서 | `load_games`, `walk_forward`, `run`, `evaluate`, `render_markdown` |
+| [pipelines/modeling/nba_prospective.py](../pipelines/modeling/nba_prospective.py) | NBA 경기 전 예측(5d-d): 그 순간 받아 둔 결과로 활성 모델 학습, 확률은 평가용·WITHHELD | `NbaPredictor`, `record_for_snapshot` |
 | [dbt/models/](../dbt/models/) | `staging.stg_matches_known` → `gold.team_match_results` → `gold.league_standings`, `staging.stg_odds_known` → `gold.match_odds_1x2` | — |
 | [dbt/tests/](../dbt/tests/) | 순위표 정합성·끝난 경기당 팀 행 2개 검사 | — |
 | [dags/openfootball_epl_daily.py](../dags/openfootball_epl_daily.py) | 매일 스키마 확인 → 시즌별 수집(동적 태스크) → 배당 CSV 수집 → dbt build → Spark 재계산·대조(4a) | — |
