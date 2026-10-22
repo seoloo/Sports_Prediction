@@ -47,7 +47,7 @@ def build_inputs(games: list[dict], target: dict, odds: list[dict]) -> dict:
                      "local_date": target["local_date"].isoformat(), "status": target["status"],
                      "home_b2b": played_before(target["home"]), "away_b2b": played_before(target["away"])},
             "home_form": form(target["home"]), "away_form": form(target["away"]),
-            "odds": [{**row, "price": str(row["price"])} for row in odds]}
+            "odds": [{**row, "price": str(row["price"]), "line": str(row.get("line", 0))} for row in odds]}
 
 
 def attach_prediction(conn, game_id: int, label: str, inputs: dict, as_of: datetime, cache: dict) -> str:

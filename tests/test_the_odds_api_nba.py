@@ -114,3 +114,16 @@ def test_basketball_aliases_never_create_football_teams(isolated_settings):
         with pytest.raises(ValueError, match="종목 불일치"):
             sync_aliases(conn, [{"source_id": "the-odds-api", "alias": "Miami Heat", "canonical_name": "Miami Heat",
                                  "sport": "basketball"}], now)
+
+
+def test_quotes_read_spreads_and_totals_with_lines():
+    ev = event(books=[{"key": "pinnacle", "last_update": "2026-10-22T20:00:00Z", "markets": [
+        {"key": "spreads", "outcomes": [{"name": "Boston Celtics", "price": 1.98, "point": -3.5},
+                                        {"name": "New York Knicks", "price": 1.93, "point": 3.5}]},
+        {"key": "totals", "outcomes": [{"name": "Over", "price": 1.89, "point": 235.5}, {"name": "Under", "price": 1.99, "point": 235.5}]},
+        {"key": "spreads", "outcomes": [{"name": "Boston Celtics", "price": 1.9, "point": -3.5},
+                                        {"name": "New York Knicks", "price": 1.9, "point": 2.5}]}]}])   # 기준선이 안 맞으면 버림
+    rows = nba.quotes(ev, ("spreads", "totals"))
+    assert {(r["market"], r["line"], r["selection"], r["price"]) for r in rows} == {
+        ("SPREAD", -3.5, "HOME", 1.98), ("SPREAD", -3.5, "AWAY", 1.93), ("TOTAL", 235.5, "OVER", 1.89), ("TOTAL", 235.5, "UNDER", 1.99)}
+    assert nba.quotes(ev) == []   # 기본은 승패만

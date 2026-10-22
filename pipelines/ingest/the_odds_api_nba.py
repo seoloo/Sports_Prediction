@@ -60,19 +60,38 @@ def due_reasons(events: list[dict], now: datetime) -> list[str]:
     return sorted(reasons)
 
 
-def quotes(event: dict) -> list[dict]:
-    """한 경기의 승패 배당. 결과 이름은 홈 팀 → HOME, 원정 팀 → AWAY. 두 결과가 다 없거나 1 이하면 그 북메이커는 버린다."""
-    names = {event["home_team"]: "HOME", event["away_team"]: "AWAY"}
+MARKET_NAMES = {"h2h": "H2H", "spreads": "SPREAD", "totals": "TOTAL"}
+
+
+def quotes(event: dict, markets: tuple = (MARKET,)) -> list[dict]:
+    """한 경기의 배당. 승패·핸디캡은 홈 팀 → HOME, 원정 팀 → AWAY, 언더오버는 Over → OVER, Under → UNDER.
+
+    핸디캡의 line은 홈 팀 핸디캡(원정 핸디캡은 그 반대 부호여야 한다), 언더오버의 line은 총점 기준선, 승패는 0.
+    두 결과가 다 없거나, 1 이하 배당이거나, 기준선이 맞지 않으면 그 북메이커·시장은 버린다.
+    """
+    names = {event["home_team"]: "HOME", event["away_team"]: "AWAY", "Over": "OVER", "Under": "UNDER"}
+    expected = {"h2h": {"HOME", "AWAY"}, "spreads": {"HOME", "AWAY"}, "totals": {"OVER", "UNDER"}}
     rows = []
     for bookmaker in event.get("bookmakers", []):
         for market in bookmaker.get("markets", []):
-            if market["key"] != MARKET:
+            if market["key"] not in markets:
                 continue
-            prices = {names.get(outcome["name"]): float(outcome["price"]) for outcome in market["outcomes"]}
-            if set(prices) != {"HOME", "AWAY"} or any(price <= 1 for price in prices.values()):
+            outcomes = {names.get(o["name"]): o for o in market["outcomes"]}
+            if set(outcomes) != expected[market["key"]] or any(float(o["price"]) <= 1 for o in outcomes.values()):
                 continue
-            for selection, price in prices.items():
-                rows.append({"bookmaker": bookmaker["key"], "selection": selection, "price": price,
+            if market["key"] == "h2h":
+                line = 0.0
+            elif market["key"] == "spreads":
+                line = float(outcomes["HOME"].get("point", "nan"))
+                if not line == -float(outcomes["AWAY"].get("point", "nan")):
+                    continue
+            else:
+                line = float(outcomes["OVER"].get("point", "nan"))
+                if not line == float(outcomes["UNDER"].get("point", "nan")) or line <= 0:
+                    continue
+            for selection, outcome in outcomes.items():
+                rows.append({"bookmaker": bookmaker["key"], "market": MARKET_NAMES[market["key"]], "line": line,
+                             "selection": selection, "price": float(outcome["price"]),
                              "published_at": _utc(market.get("last_update") or bookmaker["last_update"])})
     return rows
 
@@ -88,8 +107,9 @@ def find_game(conn: psycopg.Connection, home_id: int, away_id: int, tip: datetim
     return rows[0][0] if len(rows) == 1 else ("AMBIGUOUS" if rows else None)
 
 
-def write_odds(conn: psycopg.Connection, events: list[dict], *, raw_file_id: int, received_at: datetime) -> dict:
-    """경기를 대조표로 연결하고, 키별 최신 버전과 값이 다른 배당만 다음 버전으로 넣는다."""
+def write_odds(conn: psycopg.Connection, events: list[dict], *, raw_file_id: int, received_at: datetime,
+               markets: tuple = (MARKET,)) -> dict:
+    """경기를 대조표로 연결하고, 키(북메이커·시장·기준선·선택)별 최신 버전과 값이 다른 배당만 다음 버전으로 넣는다."""
     teams = dict(conn.execute("""SELECT a.alias, a.team_id FROM silver.team_aliases a JOIN silver.teams t USING (team_id)
                                  WHERE a.source_id = %s AND t.sport = 'basketball'""", (SOURCE_ID,)).fetchall())
     linked, unmatched = [], []
@@ -101,44 +121,47 @@ def write_odds(conn: psycopg.Connection, events: list[dict], *, raw_file_id: int
             unmatched.append({"home": event["home_team"], "away": event["away_team"], "kickoff": event["commence_time"],
                               "reason": reason})
             continue
-        linked.append((game, quotes(event)))
-    conn.execute("""CREATE TEMP TABLE game_odds_stage (game_id BIGINT, bookmaker TEXT, selection TEXT, price NUMERIC(10, 4),
-                                                        published_at TIMESTAMPTZ) ON COMMIT DROP""")
+        linked.append((game, quotes(event, markets)))
+    conn.execute("""CREATE TEMP TABLE game_odds_stage (game_id BIGINT, bookmaker TEXT, market TEXT, line NUMERIC(6, 2),
+                                                        selection TEXT, price NUMERIC(10, 4), published_at TIMESTAMPTZ)
+                    ON COMMIT DROP""")
     with conn.cursor().copy("COPY game_odds_stage FROM STDIN") as copy:
         for game_id, rows in linked:
             for quote in rows:
-                copy.write_row((game_id, quote["bookmaker"], quote["selection"], round(quote["price"], 4), quote["published_at"]))
+                copy.write_row((game_id, quote["bookmaker"], quote["market"], quote["line"], quote["selection"],
+                                round(quote["price"], 4), quote["published_at"]))
     inserted = conn.execute("""
         WITH latest AS (
-            SELECT DISTINCT ON (game_id, bookmaker, selection) game_id, bookmaker, selection, revision_no, price
+            SELECT DISTINCT ON (game_id, bookmaker, market, line, selection) game_id, bookmaker, market, line, selection,
+                   revision_no, price
             FROM silver.game_odds_revisions
-            WHERE source_id = %(source)s AND market = 'H2H'
-              AND game_id IN (SELECT DISTINCT game_id FROM game_odds_stage)
-            ORDER BY game_id, bookmaker, selection, revision_no DESC
+            WHERE source_id = %(source)s AND game_id IN (SELECT DISTINCT game_id FROM game_odds_stage)
+            ORDER BY game_id, bookmaker, market, line, selection, revision_no DESC
         )
-        INSERT INTO silver.game_odds_revisions
-        SELECT s.game_id, %(source)s, s.bookmaker, 'H2H', s.selection, COALESCE(l.revision_no, 0) + 1,
-               s.price, s.published_at, %(received)s, %(raw_file)s
-        FROM game_odds_stage s LEFT JOIN latest l USING (game_id, bookmaker, selection)
+        INSERT INTO silver.game_odds_revisions (game_id, source_id, bookmaker, market, selection, revision_no, price,
+                                                published_at, received_at, raw_file_id, line)
+        SELECT s.game_id, %(source)s, s.bookmaker, s.market, s.selection, COALESCE(l.revision_no, 0) + 1,
+               s.price, s.published_at, %(received)s, %(raw_file)s, s.line
+        FROM game_odds_stage s LEFT JOIN latest l USING (game_id, bookmaker, market, line, selection)
         WHERE l.price IS DISTINCT FROM s.price""",
                             {"source": SOURCE_ID, "received": received_at, "raw_file": raw_file_id}).rowcount
     return {"events": len(events), "linked": len(linked), "odds_new": inserted, "unmatched": unmatched}
 
 
 def fetch(conn: psycopg.Connection, settings, *, reasons: list[str], started_at: datetime | None = None,
-          opener=urllib.request.urlopen) -> dict:
-    """NBA 배당을 받아 Bronze·Silver에 넣고 실행 기록을 남긴다(1크레딧). started_at은 재조회 간격 판단의 기준이다."""
+          opener=urllib.request.urlopen, markets: tuple = (MARKET,), dataset: str = DATASET) -> dict:
+    """NBA 배당을 받아 Bronze·Silver에 넣고 실행 기록을 남긴다(시장 수만큼 크레딧). started_at은 재조회 간격의 기준이다."""
     run_id = uuid.uuid4()
     conn.execute("INSERT INTO ingest.runs VALUES (%s, %s, %s, %s, NULL, 'RUNNING', NULL, NULL)",
-                 (run_id, SOURCE_ID, DATASET, started_at or datetime.now(timezone.utc)))
+                 (run_id, SOURCE_ID, dataset, started_at or datetime.now(timezone.utc)))
     conn.commit()
     try:
         events, headers = call(f"/sports/{SPORT_KEY}/odds", settings.the_odds_api_key,
-                               {"regions": REGION, "markets": MARKET, "oddsFormat": "decimal"}, opener=opener)
+                               {"regions": REGION, "markets": ",".join(markets), "oddsFormat": "decimal"}, opener=opener)
         received_at = datetime.now(timezone.utc)
         payload = json.dumps(events, ensure_ascii=False, sort_keys=True).encode()
         sha256 = hashlib.sha256(payload).hexdigest()
-        object_key = f"{SOURCE_ID}/{DATASET}/{received_at:%Y-%m-%d}/sha256={sha256}.json"
+        object_key = f"{SOURCE_ID}/{dataset}/{received_at:%Y-%m-%d}/sha256={sha256}.json"
         store = client(settings)
         ensure_bucket(store, settings.bronze_bucket)
         put_if_absent(store, settings.bronze_bucket, object_key, payload, {"received-at": received_at.isoformat()})
@@ -146,14 +169,14 @@ def fetch(conn: psycopg.Connection, settings, *, reasons: list[str], started_at:
             inserted = conn.execute("""INSERT INTO ingest.raw_files (source_id, dataset, source_url, sha256, byte_size,
                                        object_key, first_received_at) VALUES (%s, %s, %s, %s, %s, %s, %s)
                                        ON CONFLICT (source_id, dataset, sha256) DO NOTHING RETURNING raw_file_id""",
-                                    (SOURCE_ID, DATASET, f"{API_BASE}/sports/{SPORT_KEY}/odds", sha256, len(payload),
+                                    (SOURCE_ID, dataset, f"{API_BASE}/sports/{SPORT_KEY}/odds", sha256, len(payload),
                                      object_key, received_at)).fetchone()
             raw_file_id = inserted[0] if inserted else conn.execute(
                 "SELECT raw_file_id FROM ingest.raw_files WHERE source_id=%s AND dataset=%s AND sha256=%s",
-                (SOURCE_ID, DATASET, sha256)).fetchone()[0]
+                (SOURCE_ID, dataset, sha256)).fetchone()[0]
             conn.execute("INSERT INTO ingest.fetches (run_id, raw_file_id, received_at, is_new_content) VALUES (%s, %s, %s, %s)",
                          (run_id, raw_file_id, received_at, inserted is not None))
-            result = write_odds(conn, events, raw_file_id=raw_file_id, received_at=received_at)
+            result = write_odds(conn, events, raw_file_id=raw_file_id, received_at=received_at, markets=markets)
             for index, problem in enumerate(result["unmatched"]):
                 conn.execute("""INSERT INTO silver.quality_issues (run_id, raw_file_id, record_index, issue_code, detail, created_at)
                                 VALUES (%s, %s, %s, %s, %s, %s)""",
@@ -191,6 +214,34 @@ def run_due(*, now: datetime | None = None, settings=None, force: bool = False, 
         if not reasons or (not force and previous and now - previous < REFETCH_AFTER):
             return {"status": "OK", "fetched": False, "events": len(events), "reasons": reasons, "credits_remaining": credits}
         return {"status": "OK", "fetched": True, **fetch(conn, settings, reasons=reasons, started_at=now, opener=opener)}
+
+
+LINES_DATASET = "nba-lines"
+LINE_MARKETS = ("spreads", "totals")
+LINES_REFETCH_AFTER = timedelta(minutes=60)
+
+
+def fetch_lines(*, now: datetime | None = None, settings=None, force: bool = False, opener=urllib.request.urlopen) -> dict:
+    """핸디캡·언더오버 배당을 요청할 때만 받는다(6c, 2크레딧: 시장 2개 × 지역 1개). 자동 수집에는 넣지 않는다.
+
+    1시간 안에 받은 적이 있으면 다시 받지 않는다(force 제외). 크레딧이 RESERVE_CREDITS 아래면 받지 않는다(축구 자동 수집 우선).
+    """
+    now, settings = now or datetime.now(timezone.utc), settings or load_settings()
+    if not settings.the_odds_api_key:
+        return {"status": "NOT_CONFIGURED"}
+    with connect(settings) as conn:
+        migrate(conn)
+        with conn.transaction():
+            sync_aliases(conn, load_alias_file(ALIAS_FILE), now)
+        previous = last_fetch(conn, LINES_DATASET)
+        if not force and previous and now - previous < LINES_REFETCH_AFTER:
+            return {"status": "OK", "fetched": False, "reasons": ["RECENT"], "last_fetch": previous.isoformat()}
+        _, headers = call(f"/sports/{SPORT_KEY}/events", settings.the_odds_api_key, opener=opener)   # 무료: 남은 크레딧 확인
+        credits = headers.get("x-requests-remaining")
+        if credits is not None and int(credits) < RESERVE_CREDITS + len(LINE_MARKETS):
+            return {"status": "OK", "fetched": False, "reasons": ["LOW_CREDITS"], "credits_remaining": credits}
+        return {"status": "OK", "fetched": True, **fetch(conn, settings, reasons=["ON_DEMAND"], started_at=now, opener=opener,
+                                                         markets=LINE_MARKETS, dataset=LINES_DATASET)}
 
 
 def suggest_aliases(conn: psycopg.Connection, events: list[dict]) -> list[dict]:
