@@ -61,6 +61,7 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | 5c | 리그별 백테스트·평가·활성 모델 | [5c](docs/walkthrough/5c_league_models.md) |
 | 5d-a | NBA 경기 수집(balldontlie, 2018-19~ 아홉 시즌 11,429경기, 축구와 분리한 경기 테이블, 매일 DAG) | [5d-a](docs/walkthrough/5d_nba_games.md) |
 | 5d-b | NBA 승패 배당(The Odds API, 그날 첫 경기 1시간 전 하루 1번, 월 약 30크레딧) | [5d-b](docs/walkthrough/5d_b_nba_odds.md) |
+| 5d-c | NBA 모델(점수 차 등급·Elo·연전 효과) 백테스트·평가 | [5d-c](docs/walkthrough/5d_c_nba_models.md) |
 
 평가 결과(시험 시즌 2023-24 이후, 로그 손실이 낮을수록 좋음):
 
@@ -71,8 +72,9 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | 라리가 | 0.9744 | 1.0657 | 과거 배당 없음 | NOT_VALIDATED |
 | 세리에A | 0.9828 | 1.0873 | 과거 배당 없음 | NOT_VALIDATED |
 | 에레디비시 | 0.9694 | 1.0755 | 과거 배당 없음 | NOT_VALIDATED |
+| NBA(승패 2지선다) | 0.6091 | 0.6887 | 과거 배당 없음 | NOT_VALIDATED |
 
-리그별 자세한 결과: [EPL](docs/reports/epl_baseline_evaluation.md) · [분데스리가](docs/reports/evaluation_de.1.md) · [라리가](docs/reports/evaluation_es.1.md) · [세리에A](docs/reports/evaluation_it.1.md) · [에레디비시](docs/reports/evaluation_nl.1.md) · [배당 가치·팀 편향 분석](docs/reports/value_and_team_bias_2026-10-21.md)
+축구는 1X2 3지선다라 NBA(2지선다)와 숫자를 직접 비교할 수 없습니다. 리그별 자세한 결과: [NBA](docs/reports/evaluation_nba.md) · [EPL](docs/reports/epl_baseline_evaluation.md) · [분데스리가](docs/reports/evaluation_de.1.md) · [라리가](docs/reports/evaluation_es.1.md) · [세리에A](docs/reports/evaluation_it.1.md) · [에레디비시](docs/reports/evaluation_nl.1.md) · [배당 가치·팀 편향 분석](docs/reports/value_and_team_bias_2026-10-21.md)
 
 ## 실행
 
@@ -134,6 +136,7 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 | 하고 싶은 일 | 명령 |
 |---|---|
 | NBA 시즌 다시 받기 | `.\.venv\Scripts\python.exe -m pipelines.ingest.balldontlie --season 2025-26` |
+| NBA 백테스트·평가 보고서 | `.\.venv\Scripts\python.exe -m pipelines.modeling.nba_backtest --markdown-dir docs/reports` |
 | 리그 백테스트 | `.\.venv\Scripts\python.exe -m pipelines.modeling.backtest --competition de.1` |
 | 평가 보고서 | `.\.venv\Scripts\python.exe -m pipelines.modeling.evaluation --competition de.1 --markdown-dir docs/reports` |
 | 해외 배당 지금 받기(리그당 1크레딧) | `.\.venv\Scripts\python.exe -m pipelines.ingest.the_odds_api --force en.1` |
@@ -167,7 +170,7 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 
 - **모델은 아직 검증되지 않았습니다.** EPL은 시장 배당보다 부정확했고, 다른 네 리그는 과거 배당이 없어 비교하지 못했습니다. The Odds API로 쌓이는 경기 전 배당으로 앞으로 비교합니다.
 - **경기 기록(슈팅·퇴장)은 EPL만 있습니다.** 라인업·부상 정보는 쓰지 않습니다.
-- **NBA는 경기 결과와 배당까지 있습니다(5d-a·5d-b).** 모델(5d-c)·경기 전 기록(5d-d)을 차례로 붙입니다. 과거 NBA 배당은 없어 시장 비교는 앞으로 쌓이는 배당으로만 합니다.
+- **NBA는 결과·배당·모델 평가까지 있습니다(5d-a~c).** 경기 전 기록·알림(5d-d)이 남았습니다. 과거 NBA 배당은 없어 시장 비교는 앞으로 쌓이는 배당으로만 합니다.
 - **미니 PC 상시 운영(4c)**은 장비 도입 후입니다.
 
 Football data provided by the Football-Data.org API.

@@ -11,7 +11,7 @@
 | 정제·분석 DB(Silver·Gold) | PostgreSQL + psycopg | 16.4 / 3.3.6 | 사용 중 |
 | 스트리밍 | Apache Kafka(KRaft) + confluent-kafka | 4.3.1 / 2.15.1 | 사용 중 |
 | 변환·품질 테스트 | dbt-core + dbt-postgres | 1.12.6 / 1.11.0 | 사용 중 |
-| 모델링 | numpy(Poisson·Dixon-Coles 직접 구현) | 2.5.4 | 사용 중(3b) |
+| 모델링 | numpy(Poisson·Dixon-Coles 직접 구현, NBA는 가중 ridge 점수 차 등급·Elo) | 2.5.4 | 사용 중(3b, NBA 5d-c) |
 | 오케스트레이션 | Apache Airflow(standalone, LocalExecutor) | 3.3.2 | 사용 중 |
 | 실행 환경 | Docker Compose(프로필 `streaming`, `airflow`) | — | 사용 중 |
 | CI | GitHub Actions + pytest | checkout@v5, setup-python@v6 / pytest 9.1.1 | 사용 중 |
