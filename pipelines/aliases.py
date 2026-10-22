@@ -13,7 +13,7 @@ ALIAS_FILE = Path(__file__).resolve().parent / "mappings" / "team_aliases.csv"
 
 
 def load_alias_file(path: Path = ALIAS_FILE) -> list[dict]:
-    """대조표를 읽는다. 열: source_id, alias, canonical_name, evidence. #으로 시작하는 줄은 설명이다."""
+    """대조표를 읽는다. 열: source_id, alias, canonical_name, evidence, sport(비어 있으면 football). #으로 시작하는 줄은 설명이다."""
     with path.open(encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(line for line in handle if not line.startswith("#")))
 
@@ -23,9 +23,16 @@ def sync_aliases(conn: psycopg.Connection, aliases: list[dict], now: datetime) -
 
     기준 팀이 아직 Silver에 없으면 대조표의 기준 이름으로 만든다. 대조표는 사람이 검토한 근거이므로,
     openfootball에 아직 없는 승격 팀 때문에 다른 소스의 경기가 막히지 않게 하기 위해서다.
+    농구 팀(sport = basketball)은 만들지 않는다. NBA 기준 팀은 balldontlie 수집기가 만들고, 그 전에는 별칭을 건너뛴다
+    (축구 팀으로 잘못 만들어지면 같은 이름의 NBA 팀을 넣을 수 없다). 다음 동기화 때 다시 시도한다.
     """
     for alias in aliases:
-        team = conn.execute("SELECT team_id FROM silver.teams WHERE canonical_name=%s", (alias["canonical_name"],)).fetchone()
+        sport = alias.get("sport") or "football"
+        team = conn.execute("SELECT team_id, sport FROM silver.teams WHERE canonical_name=%s", (alias["canonical_name"],)).fetchone()
+        if team and team[1] != sport:
+            raise ValueError(f"종목 불일치: {alias['alias']}({sport}) → {alias['canonical_name']}({team[1]})")
+        if not team and sport != "football":
+            continue
         if not team:
             team = conn.execute("INSERT INTO silver.teams (canonical_name, created_at) VALUES (%s, %s) RETURNING team_id",
                                 (alias["canonical_name"], now)).fetchone()

@@ -1,5 +1,5 @@
 # football-data.co.uk 팀 이름 → openfootball 기준 이름. 2026-10-21 검토: 6개 시즌 같은 날짜 경기 대조에서 모든 등장 경기가 일치함(evidence).
-source_id,alias,canonical_name,evidence
+source_id,alias,canonical_name,evidence,sport
 football-data-co-uk,Arsenal,Arsenal FC,same-date fixtures 197/197
 football-data-co-uk,Aston Villa,Aston Villa FC,same-date fixtures 197/197
 football-data-co-uk,Bournemouth,AFC Bournemouth,same-date fixtures 159/159
@@ -224,3 +224,34 @@ the-odds-api,SC Cambuur,SC Cambuur-Leeuwarden,same kickoff 2026-10-24T16:45Z (nl
 the-odds-api,SC Telstar,Telstar 1963,same kickoff 2026-10-23T18:00Z (nl.1); name similarity 0.74
 the-odds-api,Sparta Rotterdam,Sparta Rotterdam,same kickoff 2026-10-25T15:45Z (nl.1); name similarity 1.00
 the-odds-api,Willem II,Willem II Tilburg,same kickoff 2026-10-31T17:45Z (nl.1); name similarity 0.69
+# 5d-b(2026-10-22): The Odds API NBA 팀 이름 → balldontlie 기준 이름. 시작 시각 3시간 안 경기 중 이름이 가장 비슷한 경기, 팀마다 후보 1개. 유사도 1 미만은 Los Angeles Clippers ↔ LA Clippers 하나(사람 확인)
+the-odds-api,Atlanta Hawks,Atlanta Hawks,tip-off within 3h 1/1; similarity 1.00,basketball
+the-odds-api,Boston Celtics,Boston Celtics,tip-off within 3h 4/4; similarity 1.00,basketball
+the-odds-api,Brooklyn Nets,Brooklyn Nets,tip-off within 3h 1/1; similarity 1.00,basketball
+the-odds-api,Charlotte Hornets,Charlotte Hornets,tip-off within 3h 2/2; similarity 1.00,basketball
+the-odds-api,Chicago Bulls,Chicago Bulls,tip-off within 3h 2/2; similarity 1.00,basketball
+the-odds-api,Cleveland Cavaliers,Cleveland Cavaliers,tip-off within 3h 2/2; similarity 1.00,basketball
+the-odds-api,Dallas Mavericks,Dallas Mavericks,tip-off within 3h 2/2; similarity 1.00,basketball
+the-odds-api,Denver Nuggets,Denver Nuggets,tip-off within 3h 5/5; similarity 1.00,basketball
+the-odds-api,Detroit Pistons,Detroit Pistons,tip-off within 3h 3/3; similarity 1.00,basketball
+the-odds-api,Golden State Warriors,Golden State Warriors,tip-off within 3h 4/4; similarity 1.00,basketball
+the-odds-api,Houston Rockets,Houston Rockets,tip-off within 3h 2/2; similarity 1.00,basketball
+the-odds-api,Indiana Pacers,Indiana Pacers,tip-off within 3h 3/3; similarity 1.00,basketball
+the-odds-api,Los Angeles Clippers,LA Clippers,tip-off within 3h 2/2; similarity 0.71,basketball
+the-odds-api,Los Angeles Lakers,Los Angeles Lakers,tip-off within 3h 5/5; similarity 1.00,basketball
+the-odds-api,Memphis Grizzlies,Memphis Grizzlies,tip-off within 3h 1/1; similarity 1.00,basketball
+the-odds-api,Miami Heat,Miami Heat,tip-off within 3h 5/5; similarity 1.00,basketball
+the-odds-api,Milwaukee Bucks,Milwaukee Bucks,tip-off within 3h 1/1; similarity 1.00,basketball
+the-odds-api,Minnesota Timberwolves,Minnesota Timberwolves,tip-off within 3h 4/4; similarity 1.00,basketball
+the-odds-api,New Orleans Pelicans,New Orleans Pelicans,tip-off within 3h 1/1; similarity 1.00,basketball
+the-odds-api,New York Knicks,New York Knicks,tip-off within 3h 5/5; similarity 1.00,basketball
+the-odds-api,Oklahoma City Thunder,Oklahoma City Thunder,tip-off within 3h 3/3; similarity 1.00,basketball
+the-odds-api,Orlando Magic,Orlando Magic,tip-off within 3h 2/2; similarity 1.00,basketball
+the-odds-api,Philadelphia 76ers,Philadelphia 76ers,tip-off within 3h 5/5; similarity 1.00,basketball
+the-odds-api,Phoenix Suns,Phoenix Suns,tip-off within 3h 1/1; similarity 1.00,basketball
+the-odds-api,Portland Trail Blazers,Portland Trail Blazers,tip-off within 3h 3/3; similarity 1.00,basketball
+the-odds-api,Sacramento Kings,Sacramento Kings,tip-off within 3h 1/1; similarity 1.00,basketball
+the-odds-api,San Antonio Spurs,San Antonio Spurs,tip-off within 3h 5/5; similarity 1.00,basketball
+the-odds-api,Toronto Raptors,Toronto Raptors,tip-off within 3h 3/3; similarity 1.00,basketball
+the-odds-api,Utah Jazz,Utah Jazz,tip-off within 3h 1/1; similarity 1.00,basketball
+the-odds-api,Washington Wizards,Washington Wizards,tip-off within 3h 3/3; similarity 1.00,basketball
