@@ -32,6 +32,7 @@
 | [pipelines/mappings/team_aliases.csv](../pipelines/mappings/team_aliases.csv) | 검토한 팀 이름 대조표(같은 날짜 경기 근거) | — |
 | [pipelines/ingest/the_odds_api.py](../pipelines/ingest/the_odds_api.py) | The Odds API 수집: 스냅샷 직전에만 리그별 배당(크레딧 예산), Bronze 원본, 값이 바뀐 배당만 버전, 팀 대조표 후보(5b) | `run_due`, `due_offsets`, `quotes`, `write_odds`, `suggest_aliases` |
 | [pipelines/ingest/balldontlie.py](../pipelines/ingest/balldontlie.py) | NBA 수집(5d-a): cursor로 시즌 전체 → 쪽 단위 Bronze → 정규화(순수 함수) → `silver.games`·`game_revisions`(바뀐 경기만) | `fetch_season`, `normalize_game`, `write_silver`, `ingest`, `current_season` |
+| [pipelines/ingest/the_odds_api_nba.py](../pipelines/ingest/the_odds_api_nba.py) | NBA 배당(5d-b): 동부 날짜별 첫 경기 1시간 전 하루 1번, 시작 ±3시간 경기 연결, 바뀐 배당만 `silver.game_odds_revisions` 버전 | `run_due`, `due_reasons`, `quotes`, `find_game`, `write_odds`, `suggest_aliases` |
 | [pipelines/aliases.py](../pipelines/aliases.py) | 검토한 팀 대조표 읽기·반영(소스 공통) | `load_alias_file`, `sync_aliases` |
 | [pipelines/ingest/football_data_org.py](../pipelines/ingest/football_data_org.py) | API 수집기: 요청 한도·429 처리, Bronze 보존, 바뀐 경우에만 이벤트 발행, 조회 간격 자동 조절 | `fetch_json`, `poll_once`, `next_poll_interval` |
 | [pipelines/ingest/rate_limit.py](../pipelines/ingest/rate_limit.py) | 의존성 없는 공용 요청 제한기(최근 60초 요청 수). football-data.org 10회, balldontlie 5회 | `RateLimiter` |

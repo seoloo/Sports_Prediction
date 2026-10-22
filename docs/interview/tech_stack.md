@@ -17,7 +17,7 @@
 | CI | GitHub Actions + pytest | checkout@v5, setup-python@v6 / pytest 9.1.1 | 사용 중 |
 | 개인 앱 | Streamlit + SQLite | 1.65.0 / 표준 라이브러리 | 사용 중(기존 카탈로그 앱) |
 | 알림 | 텔레그램 Bot API(표준 라이브러리 urllib) | — | 사용 중(4b), 실제 전송은 토큰 설정 후 |
-| 배당 API | The Odds API(무료 Starter, 월 500크레딧) | v4 | 사용 중(5b): 다섯 리그, 경기 24·1시간 전, Pinnacle 우선 |
+| 배당 API | The Odds API(무료 Starter, 월 500크레딧) | v4 | 사용 중(5b): 다섯 리그, 경기 24·1시간 전, Pinnacle 우선. NBA(5d-b)는 하루 1번 |
 | NBA 경기 API | balldontlie(무료, 분당 5회, `Authorization` 헤더 키) | v1 | 사용 중(5d-a): 2018-19~ 아홉 시즌, 매일 12:00 UTC |
 | 문서 그림 | HTML → Edge headless → PNG | — | 사용 중 |
 | 레이크 파일 형식 | Parquet(pyarrow) | 25.0.1 | 사용 중(4a) |

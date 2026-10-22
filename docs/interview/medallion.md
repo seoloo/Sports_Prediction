@@ -64,6 +64,7 @@
 | `silver.match_stats_revisions` | 1,969 | 경기 기록(슈팅·유효 슈팅·퇴장)의 버전(co.uk, 3g) |
 | `silver.odds_revisions` | 166,589 | 배당의 버전(북메이커 × 시장 × 선택지 × 시점) |
 | `silver.games` | 11,429 | NBA 경기의 정체성(소스 경기 ID). 같은 대진이 여러 번 열려 축구 `matches`와 분리(5d) |
+| `silver.game_odds_revisions` | 712 | NBA 승패 배당의 버전(북메이커 × HOME·AWAY, 5d-b) |
 | `silver.game_revisions` | 11,431 | NBA 일정·상태·점수의 버전. 무승부 없음을 CHECK로 강제 |
 | `silver.quality_issues` | 2 | 수집 단계에서 걸러낸 레코드와 사유 |
 | `silver.stream_rejections` | 0 | 스트리밍에서 반영하지 않은 이벤트와 사유 |
