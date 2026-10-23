@@ -21,6 +21,12 @@ ENVELOPE_SCHEMA = "envelope.v1.json"
 PAYLOAD_SCHEMAS = {("match_snapshot", 1): "match_snapshot.v1.json"}
 
 
+# 오류 큐로 보내는 거부 사유(소비자·운영 보고서가 함께 쓴다). 계약 위반은 고칠 수 없는 원본이라 증거로,
+# UNMAPPED_TEAM은 대조표를 고친 뒤 다시 보낼 수 있어서. STALE_EVENT(늦게 온 옛 정보)는 규칙대로 버린 정상 동작이라 넣지 않는다.
+DLQ_REASONS = frozenset({"INVALID_JSON", "SCHEMA_VIOLATION", "UNSUPPORTED_SCHEMA_VERSION", "UNKNOWN_EVENT_TYPE",
+                         "EVENT_ID_MISMATCH", "UNMAPPED_TEAM"})
+
+
 class ContractViolation(ValueError):
     """계약 위반. reason은 거부 사유 코드, detail은 어디가 왜 틀렸는지(경로·메시지·스키마)."""
 

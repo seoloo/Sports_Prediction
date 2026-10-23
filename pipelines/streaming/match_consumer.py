@@ -25,7 +25,7 @@ from ..aliases import ALIAS_FILE, load_alias_file, sync_aliases
 from ..config import load_settings
 from ..db import connect, migrate
 from . import events, kafka_io
-from .contracts import ContractViolation
+from .contracts import DLQ_REASONS, ContractViolation
 
 GROUP_ID = "silver-match-writer"
 # 이 소비자가 읽는 토픽. 토픽마다 처리 함수가 다르다(dispatch_handler).
@@ -107,10 +107,7 @@ def dispatch_handler(topic: str, settings=None):
 
 
 ASSIGNMENT_TIMEOUT_SECONDS = 30   # until_idle 모드에서 파티션 배정을 기다리는 최대 시간
-# 오류 큐로 보내는 거부 사유. 계약 위반은 고칠 수 없는 원본이라 증거로, UNMAPPED_TEAM은 대조표를 고친 뒤 다시 보낼 수 있어서.
-# STALE_EVENT(늦게 온 옛 정보)는 규칙대로 버린 정상 동작이라 보내지 않는다.
-DLQ_REASONS = {"INVALID_JSON", "SCHEMA_VIOLATION", "UNSUPPORTED_SCHEMA_VERSION", "UNKNOWN_EVENT_TYPE", "EVENT_ID_MISMATCH",
-               "UNMAPPED_TEAM"}
+# 오류 큐로 보내는 거부 사유는 contracts.DLQ_REASONS(운영 보고서도 같은 목록을 쓴다).
 
 
 def dead_letter_headers(conn, message, reason: str, group_id: str, now: datetime) -> dict[str, str]:

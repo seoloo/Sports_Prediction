@@ -10,6 +10,7 @@ DAG 이름은 처음 EPL만 다룰 때 붙인 것이라 실행 기록을 잇기 
 - dbt 품질 테스트가 하나라도 실패하면 DAG 실행이 실패로 표시된다.
 - Spark 결과와 dbt 결과가 한 칸이라도 다르면 마지막 작업이 실패로 표시된다. Gold가 같으면 같은 스냅샷이라 다시 계산하지 않는다.
 - 6a: dbt build는 NBA Gold(nba_standings 등)도 만들고, 끝나면 수집기별 신선도(마지막 수집 시각)를 검사한다.
+- 7c: 맨 끝에 운영 상태 보고서(data/ops/status.html)를 만든다. 앞 작업이 실패해도 만든다(실패를 보여 주는 보고서라서).
 """
 import urllib.error
 from datetime import datetime, timedelta, timezone
@@ -91,10 +92,21 @@ def openfootball_epl_daily():
         trigger_rule="all_done",   # 수집이 실패했어도 신선도는 본다(수집 실패의 결과를 바로 드러내기 위해)
     )
 
+    @task(trigger_rule="all_done", retries=0)
+    def ops_status():
+        """운영 상태 보고서(7c): 신선도·수집 실행·크레딧·스트림·경기 전 기록·주간 채점·레이크를 한 장으로. 읽기만 한다."""
+        from pipelines.ops import status
+        from pipelines.config import load_settings
+        settings = load_settings()
+        freshness = status.run_freshness(settings, status.DEFAULT_OUT.with_name("freshness.json"))
+        return status.write(status.collect(settings, freshness=freshness), status.DEFAULT_OUT)
+
     # 배당은 openfootball 경기에 연결하므로 경기 수집이 끝난 뒤에 넣는다.
     migrate_schema() >> ingest_season.expand(target=seasons_to_ingest()) >> ingest_football_data_files() >> dbt_build
-    dbt_build >> spark_reconcile()
+    reconcile = spark_reconcile()
+    dbt_build >> reconcile
     dbt_build >> source_freshness
+    [reconcile, source_freshness] >> ops_status()
 
 
 openfootball_epl_daily()
