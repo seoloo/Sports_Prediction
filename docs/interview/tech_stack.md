@@ -21,6 +21,7 @@
 | NBA 경기 API | balldontlie(무료, 분당 5회, `Authorization` 헤더 키) | v1 | 사용 중(5d-a): 2018-19~ 아홉 시즌, 매일 12:00 UTC |
 | 문서 그림 | HTML → Edge headless → PNG | — | 사용 중 |
 | 레이크 파일 형식 | Parquet(pyarrow) | 25.0.1 | 사용 중(4a) |
+| 레이크 테이블 형식 | Apache Iceberg(PyIceberg, Postgres SQL 카탈로그) | 0.12.0 | 사용 중(7a) |
 | 분산 처리 | Apache Spark(pyspark, 단일 컨테이너 local 모드) | 4.1.3 | 사용 중(4a). 클러스터 실행은 계획 |
 | 배포 | Kubernetes(kind·k3d) + Helm | — | **계획** |
 | 모바일 보기 | 텔레그램 알림(4b)으로 대체. 조회 웹 화면(FastAPI)은 4c에서 필요하면 | — | 웹 화면은 **계획** |
@@ -55,7 +56,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
   - 수집 기록과 데이터 반영을 한 트랜잭션으로 묶을 수 있다.
 - **대안과 판단:**
   - BigQuery·Snowflake: 비용과 외부 의존이 생기고, 이 규모에서는 이점이 없다.
-  - Delta Lake·Iceberg: 시간 여행 기능이 있지만, 이 프로젝트는 "발표 시각·수신 시각" 두 축이 필요해 직접 설계했다. 데이터가 커지면 Gold 일부를 옮길 계획.
+  - Delta Lake·Iceberg: 시간 여행 기능이 있지만, 이 프로젝트는 "발표 시각·수신 시각" 두 축이 필요해 Silver는 직접 설계했다. 내보낸 Gold는 7a부터 Iceberg 테이블 스냅샷으로도 쌓는다(아래).
 - **쓰는 곳:** `pipelines/sql/001~004_*.sql`, `pipelines/db.py`(마이그레이션, advisory lock).
 - **로컬 포트:** 127.0.0.1:55432(외부에 열지 않음).
 
@@ -144,6 +145,14 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 - **S3 연결:** s3a 커넥터 대신 boto3로 내려받고 올린다. s3a는 hadoop-aws와 수백 MB의 AWS SDK가 필요해 수 MB 자료에는 과하다. 커지면 바꾼다.
 - **Parquet:** 시즌별 Hive 방식 파티션, 열 형식 명시, 시각은 UTC 마이크로초(Spark 기본 INT96은 다른 도구가 시간대 없이 읽음).
 - **대안:** DuckDB(한 대에서 Parquet를 SQL로 빠르게)도 맞지만, 여러 대로 늘어나는 경로와 채용 수요를 생각해 Spark를 골랐다.
+### Apache Iceberg + PyIceberg 0.12.0 (7a)
+
+- **역할:** 매일 내보낸 Gold를 Iceberg 테이블 5개(`gold.*`)의 스냅샷으로 쌓는다. 스냅샷 요약에 내보내기 ID를 붙여 같은 내보내기는 다시 쓰지 않고, 내보내기 ID·시각으로 그때의 테이블을 읽는다.
+- **카탈로그:** PyIceberg SQL 카탈로그(Postgres `lakehouse` 스키마). REST·Hive 카탈로그 서버를 따로 띄우지 않는다. 연결은 SQLAlchemy + 기존 psycopg 3.
+- **검증:** 매일 모든 스냅샷을 그 내보내기 파일과 행 단위로 대조(불일치면 작업 실패). 테스트에서는 dbt를 `as_of`로 다시 계산한 Gold와 옛 스냅샷이 같은지 확인.
+- **대안:** Delta Lake는 Spark 중심이고 Python 쪽 쓰기 도구(delta-rs)가 따로다. Iceberg는 엔진 중립(Spark·Trino·DuckDB·Snowflake)이고 카탈로그를 고를 수 있어 골랐다.
+- **한계:** Spark는 아직 내보내기 파일을 읽는다(Iceberg 런타임 jar가 필요, 7b).
+
 - **쓰는 곳:** `pipelines/lake/`, `tests/test_lake.py`, `tests/test_spark_features.py`(CI는 Spark 이미지 안에서 `REQUIRE_SPARK=1`로 실행).
 
 ### 문서 그림(Edge headless)

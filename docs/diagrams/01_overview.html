@@ -70,10 +70,10 @@
         <div class="tech-row"><div class="name">PostgreSQL<span>Silver · 버전</span></div><div class="why">버전 테이블 + 트리거로 <b>수정·삭제를 DB가 차단</b>, <span class="code">*_known_at(as_of)</span> 함수로 그때의 데이터를 조회</div></div>
         <div class="tech-row"><div class="name">Kafka<span>스트리밍</span></div><div class="why">경기 갱신은 원래 <b>시간순 이벤트</b>. JSON Schema 계약으로 깨진 메시지는 오류 큐로, 중복·늦은 도착을 거르고 과거 시즌을 재생해 검증</div></div>
         <div class="tech-row"><div class="name">dbt<span>Gold · 품질 테스트</span></div><div class="why">순위표·시점 특징·배당 확률을 코드로 정의, <b>품질 테스트 38개</b>, 과거 기준 시각으로 재계산</div></div>
-        <div class="tech-row"><div class="name">Spark · Parquet<span>레이크 · 대조</span></div><div class="why">Gold를 Parquet 레이크로 내보내고 Spark로 <b>독립 재계산해 dbt와 행 단위 대조</b>(불일치 0)</div></div>
+        <div class="tech-row"><div class="name">Spark · Iceberg<span>레이크 · 대조</span></div><div class="why">Gold를 Iceberg 테이블 스냅샷으로 쌓아 <b>그날의 Gold를 시간 여행</b>으로 읽고, Spark로 <b>독립 재계산해 dbt와 행 단위 대조</b>(불일치 0)</div></div>
         <div class="tech-row"><div class="name">Airflow<span>오케스트레이션</span></div><div class="why">매일 수집·변환, <b>30분마다 경기 전 스냅샷</b>, 주간 채점, 실패 알림. API 크레딧 예산 안에서</div></div>
         <div class="tech-row"><div class="name">numpy<span>모델 · 평가</span></div><div class="why">Poisson·Dixon-Coles·점수 차 등급·Elo, <b>시간순 백테스트 + 블록 부트스트랩</b> 검증 기준</div></div>
-        <div class="tech-row"><div class="name">Docker · CI<span>재현 · 검증</span></div><div class="why">Compose로 전체 스택 재현, GitHub Actions에서 <b>테스트 215개 + Spark + dbt</b></div></div>
+        <div class="tech-row"><div class="name">Docker · CI<span>재현 · 검증</span></div><div class="why">Compose로 전체 스택 재현, GitHub Actions에서 <b>테스트 216개 + Spark + dbt</b></div></div>
       </div>
     </div>
 
@@ -85,7 +85,7 @@
           <div class="num"><b>23,693</b><span>경기(축구 12,264 · NBA 11,429)</span></div>
           <div class="num"><b>17.8만</b><span>배당 버전(해외 북메이커)</span></div>
           <div class="num"><b>60만</b><span>시간순 백테스트 예측</span></div>
-          <div class="num"><b>215</b><span>자동 테스트(CI 포함)</span></div>
+          <div class="num"><b>216</b><span>자동 테스트(CI 포함)</span></div>
         </div>
         <div class="item"><b>정직한 결론</b><span>모델은 단순 비율보다 확실히 낫지만 시장 배당은 못 이김 → 모두 NOT_VALIDATED, 확률 비공개(WITHHELD)</span></div>
         <div class="item"><b>매주 자동으로</b><span>경기 전에 얼린 예측을 같은 시점의 시장 확률과 나란히 채점, 텔레그램으로 요약</span></div>

@@ -29,5 +29,6 @@
 | 6a | [NBA Gold·데이터 신선도](6a_nba_gold_freshness.md) | 여러 종목 Gold, "데이터가 바뀌었나"와 "수집이 돌았나"를 나눈 신선도 검사, Windows가 포트를 예약해 막힌 사건 |
 | 6b | [NBA Spark 대조](6b_nba_spark_reconcile.md) | 순위 규칙까지 두 엔진이 따로 구현해 칸 단위로 맞추기, 원자료에서 시작해야 독립 검증인 이유 |
 | 6c | [Kafka 계약과 오류 큐](6c_kafka_contracts.md) | JSON Schema 계약과 호환 규칙, 생산자·소비자 양쪽 검사, 오류 큐 순서 보장, 실제 원본에서 찾은 출처 오류 21건 |
+| 7a | [Iceberg 레이크하우스](7a_iceberg_lakehouse.md) | 파일 묶음과 테이블 형식의 차이, SQL 카탈로그, 내보내기 ID 스냅샷과 시간 여행, 두 시간 여행(Postgres·Iceberg)이 같은 답인지 |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md), 주제별(예외 처리·메달리온·기술 스택) 정리는 [면접 준비 문서](../interview/README.md)를 함께 보세요.
