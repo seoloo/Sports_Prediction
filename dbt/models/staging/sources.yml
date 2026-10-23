@@ -14,3 +14,41 @@ sources:
         description: 배당의 버전(football-data.co.uk). 수정·삭제는 DB 트리거가 막는다.
       - name: match_stats_revisions
         description: 경기 기록(슈팅·유효 슈팅·퇴장)의 버전(football-data.co.uk, 3g). 수정·삭제는 DB 트리거가 막는다.
+      - name: games
+        description: NBA 경기의 정체성(소스 경기 ID, 5d-a). 같은 대진이 여러 번 열려 축구 matches와 분리
+      - name: game_revisions
+        description: NBA 일정·상태·점수의 버전. 끝난 경기는 동점일 수 없다(DB CHECK)
+      - name: game_odds_revisions
+        description: NBA 배당의 버전(승패·핸디캡·언더오버, 기준선 line 포함, 5d-b·6c)
+
+  # 6a: 데이터 신선도(SLA). "데이터가 바뀌었나"가 아니라 "수집이 돌았나"를 본다.
+  # 경기 버전은 내용이 바뀔 때만 생기므로(예: 쉬는 기간) 신선도 기준이 될 수 없다.
+  # 수집 기록(ingest.fetches)은 같은 원본을 다시 받아도 매번 남으므로 수집기의 생존 신호가 된다.
+  # 실행: python -m pipelines.dbt_runner source freshness
+  - name: ingest
+    description: 수집 실행 기록. 소스마다 마지막으로 받은 시각으로 수집이 멈췄는지 본다.
+    tables:
+      - name: openfootball_fetches
+        identifier: fetches
+        description: openfootball 수집(매일 06:00 UTC)
+        loaded_at_field: received_at
+        freshness:
+          warn_after: {count: 36, period: hour}
+          error_after: {count: 72, period: hour}
+          filter: "raw_file_id in (select raw_file_id from ingest.raw_files where source_id = 'openfootball')"
+      - name: balldontlie_fetches
+        identifier: fetches
+        description: NBA 수집(매일 12:00 UTC)
+        loaded_at_field: received_at
+        freshness:
+          warn_after: {count: 36, period: hour}
+          error_after: {count: 72, period: hour}
+          filter: "raw_file_id in (select raw_file_id from ingest.raw_files where source_id = 'balldontlie')"
+      - name: football_data_org_fetches
+        identifier: fetches
+        description: 실시간 경기 상태 수집기(평소 6시간, 경기 날 2~15분 간격). streaming 프로필이 꺼져 있으면 경고
+        loaded_at_field: received_at
+        freshness:
+          warn_after: {count: 12, period: hour}
+          error_after: {count: 48, period: hour}
+          filter: "raw_file_id in (select raw_file_id from ingest.raw_files where source_id = 'football-data-org')"

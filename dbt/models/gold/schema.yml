@@ -91,3 +91,50 @@ models:
           - accepted_values:
               arguments:
                 values: ["HOME", "DRAW", "AWAY"]
+
+  # 6a: NBA
+  - name: stg_games_known
+    description: 기준 시각에 알려진 NBA 경기별 최신 정보와 팀 이름
+    columns:
+      - name: game_id
+        data_tests: [unique, not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["SCHEDULED", "IN_PROGRESS", "FINISHED", "POSTPONED"]
+
+  - name: nba_team_game_results
+    description: 끝난 NBA 경기를 팀 관점 2행으로 펼친 테이블(무승부 없음)
+    data_tests:
+      - dbt_utils_free_unique_combination:
+          arguments:
+            columns: ["game_id", "venue"]
+    columns:
+      - name: result
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["W", "L"]
+      - name: points_for
+        data_tests: [not_null]
+
+  - name: nba_standings
+    description: NBA 시즌별 정규 시즌 순위(승률 → 득실 차 → 팀 이름)
+    data_tests:
+      - dbt_utils_free_unique_combination:
+          arguments:
+            columns: ["competition_code", "season", "team"]
+      - dbt_utils_free_unique_combination:
+          arguments:
+            columns: ["competition_code", "season", "position"]
+
+  - name: nba_game_odds_h2h
+    description: NBA 경기 × 소스 × 북메이커별 승패 배당과 정규화 내재 확률
+    data_tests:
+      - dbt_utils_free_unique_combination:
+          arguments:
+            columns: ["game_id", "source_id", "bookmaker"]
+    columns:
+      - name: prob_home
+        data_tests: [not_null]

@@ -110,3 +110,43 @@ def test_live_source_overrides_openfootball_in_gold(dbt_settings):
     assert query(s, alpha)[0][0] == 4 and query(s, source)[0][0] == "football-data-org"
     build(s, "--vars", '{as_of: "2025-08-18T00:00:00Z"}')  # live 버전을 받기 전 시점
     assert query(s, alpha)[0][0] == 2 and query(s, source)[0][0] == "openfootball"
+
+
+def test_nba_gold_standings_odds_and_as_of(dbt_settings):
+    """6a: NBA 경기·배당이 Gold 순위표·배당 확률로, 기준 시각을 앞당기면 그때 끝난 경기만."""
+    from datetime import timezone
+    from pipelines.ingest import balldontlie
+    from tests.test_balldontlie import CELTICS, KNICKS, game, page
+    s = dbt_settings
+    heat = {"id": 16, "full_name": "Miami Heat"}
+    games = [game(1, home=CELTICS, away=KNICKS, home_score=110, away_score=100, day="2025-10-22"),
+             game(2, home=KNICKS, away=heat, home_score=95, away_score=101, day="2025-10-24"),
+             game(3, home=heat, away=CELTICS, home_score=99, away_score=104, day="2025-10-26")]
+    balldontlie.ingest("2025-26", pages=[page(games)], settings=s, received_at=datetime(2025, 10, 27, tzinfo=timezone.utc))
+    with psycopg.connect(s.postgres_conninfo) as conn:
+        game_id = conn.execute("SELECT game_id FROM silver.games WHERE external_id = '1'").fetchone()[0]
+        raw = conn.execute("SELECT raw_file_id FROM ingest.raw_files LIMIT 1").fetchone()[0]
+        for selection, price in (("HOME", 1.5), ("AWAY", 2.75)):
+            conn.execute("""INSERT INTO silver.game_odds_revisions (game_id, source_id, bookmaker, market, selection, revision_no,
+                            price, published_at, received_at, raw_file_id) VALUES (%s, 'the-odds-api', 'pinnacle', 'H2H', %s, 1,
+                            %s, '2025-10-21T00:00:00Z', '2025-10-21T00:00:00Z', %s)""", (game_id, selection, price, raw))
+    build(s)
+    standings = query(s, "SELECT position, team, played, won, lost, win_pct::float, point_difference FROM gold.nba_standings ORDER BY position")
+    assert standings == [(1, "Boston Celtics", 2, 2, 0, 1.0, 15), (2, "Miami Heat", 2, 1, 1, 0.5, 1), (3, "New York Knicks", 2, 0, 2, 0.0, -16)]
+    odds = query(s, "SELECT prob_home::float, prob_away::float, overround::float FROM gold.nba_game_odds_h2h")
+    assert odds[0][0] == pytest.approx((1 / 1.5) / (1 / 1.5 + 1 / 2.75), abs=1e-6) and odds[0][2] > 1
+    assert query(s, "SELECT count(*) FROM gold.nba_team_game_results")[0][0] == 6
+    # 결과를 받기 전 시점으로 다시 계산하면 NBA 순위표는 비어 있다(수신 시각 10/27).
+    build(s, "--vars", '{as_of: "2025-10-26T00:00:00Z"}')
+    assert query(s, "SELECT count(*) FROM gold.nba_standings")[0][0] == 0
+
+
+def test_source_freshness_flags_a_stalled_collector(dbt_settings):
+    """6a: 마지막 수집이 72시간을 넘으면 신선도 검사가 실패하고, 다시 수집하면 통과한다."""
+    from datetime import timezone
+    s = dbt_settings
+    freshness = ["source", "freshness", "--quiet", "--select", "source:ingest.openfootball_fetches"]
+    ingest(s, SAMPLE_PATH.read_bytes(), "2025-08-17T00:00:00+00:00")            # 오래전 수집 한 번뿐
+    assert dbt_runner.run_dbt(freshness, s) != 0
+    ingest(s, SAMPLE_PATH.read_bytes(), datetime.now(timezone.utc).isoformat())  # 같은 원본을 지금 다시 받음
+    assert dbt_runner.run_dbt(freshness, s) == 0                                 # 내용이 같아도 수집 기록은 새로 남는다

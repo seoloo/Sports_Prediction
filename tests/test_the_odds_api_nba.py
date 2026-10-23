@@ -90,9 +90,15 @@ def test_run_due_links_by_teams_and_nearby_tipoff_and_versions_changes(nba_seaso
     prices["home"] = 1.45
     forced = nba.run_due(now=TIP - timedelta(minutes=30), settings=s, force=True, opener=opener)
     assert forced["odds_new"] == 1                                             # 바뀐 HOME만 새 버전
-    at = "SELECT price::float FROM silver.game_odds_known_at(%s) WHERE selection = 'HOME'"
-    assert query(s, at, (datetime(2026, 10, 22, 21, tzinfo=timezone.utc),)) == [(1.5,)]
-    assert query(s, at, (datetime(2026, 10, 23, tzinfo=timezone.utc),)) == [(1.45,)]
+    # 버전 기록: 값과 북메이커가 바꾼 시각(published_at)이 순서대로 남는다. 수신 시각은 실제 시계라 비교하지 않는다
+    # (고정 시각으로 시점 조회를 하면 실행 날짜에 따라 결과가 달라진다, 2026-10-23 실패).
+    history = query(s, """SELECT revision_no, price::float, published_at FROM silver.game_odds_revisions
+                          WHERE selection = 'HOME' ORDER BY revision_no""")
+    assert [(r[0], r[1]) for r in history] == [(1, 1.5), (2, 1.45)]
+    assert history[0][2] == datetime(2026, 10, 22, 20, tzinfo=timezone.utc)
+    assert history[1][2] == datetime(2026, 10, 22, 22, 50, tzinfo=timezone.utc)
+    latest = "SELECT price::float FROM silver.game_odds_known_at(now()) WHERE selection = 'HOME'"
+    assert query(s, latest) == [(1.45,)]
 
 
 def test_low_credits_skip_nba(nba_season):
