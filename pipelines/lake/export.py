@@ -5,6 +5,7 @@
 - matches: 특징을 계산할 경기 목록(gold.match_features_pit와 같은 경기)
 - dbt_match_features: dbt가 계산한 특징(대조의 정답). 같은 스냅샷 안에 두어, 내보낸 뒤 Gold가 다시 만들어져도
   Spark 결과를 "같은 입력으로 dbt가 낸 값"과 비교할 수 있게 한다.
+- nba_games, dbt_nba_standings(6b): 끝난 NBA 경기 원자료와 dbt 순위표(정답).
 
 경로: exports/<스냅샷>/<테이블>/season=<시즌>/part-0.parquet (Hive 방식 파티션: Spark가 시즌 열을 경로에서 읽는다)
 스냅샷 ID는 내용의 해시라, 같은 Gold를 다시 내보내면 같은 경로에 같은 파일(이미 있으면 올리지 않음).
@@ -26,6 +27,7 @@ PREFIX = "exports"
 PARQUET = "application/vnd.apache.parquet"
 UTC_TIME = pa.timestamp("us", tz="UTC")
 FEATURES = ("l10_n", "l10_gf", "l10_ga", "l10_pts", "l38_n", "l38_gf", "l38_ga", "rest_days", "last_feature_kickoff")
+NBA_COUNTS = ("played", "won", "lost", "points_for", "points_against", "point_difference")
 
 # 테이블 이름 → (SQL, 파일 안 열의 형식). 첫 열(season)은 경로로 나뉘어 파일 안에는 넣지 않는다.
 TABLES = {
@@ -46,6 +48,17 @@ TABLES = {
         pa.schema([("match_id", pa.int64())] + [
             (f"{side}_{column}", pa.int64() if column.endswith("_n") else UTC_TIME if column == "last_feature_kickoff"
              else pa.float64()) for side in ("home", "away") for column in FEATURES])),
+    # 6b: NBA. Spark는 팀별로 펼친 Gold(nba_team_game_results)가 아니라 끝난 경기 원자료에서 순위표를 처음부터 만든다.
+    "nba_games": (
+        """SELECT season, game_id, postseason, home_team, away_team, home_score, away_score FROM staging.stg_games_known
+           WHERE status = 'FINISHED' ORDER BY season, game_id""",
+        pa.schema([("game_id", pa.int64()), ("postseason", pa.bool_()), ("home_team", pa.string()),
+                   ("away_team", pa.string()), ("home_score", pa.int32()), ("away_score", pa.int32())])),
+    "dbt_nba_standings": (
+        """SELECT season, team, played, won, lost, points_for, points_against, point_difference, win_pct::float8,
+                  avg_margin::float8, position FROM gold.nba_standings ORDER BY season, position""",
+        pa.schema([("team", pa.string())] + [(name, pa.int64()) for name in NBA_COUNTS]
+                  + [("win_pct", pa.float64()), ("avg_margin", pa.float64()), ("position", pa.int64())])),
 }
 
 

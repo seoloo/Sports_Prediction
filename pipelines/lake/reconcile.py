@@ -10,8 +10,8 @@ import json
 import pyarrow.parquet as pq
 
 from ..object_store import read_object
-from .export import FEATURES, PREFIX
-from .spark_features import OUTPUT_PREFIX
+from .export import FEATURES, NBA_COUNTS, PREFIX
+from .spark_features import NBA_OUTPUT_PREFIX, OUTPUT_PREFIX
 
 TOLERANCE = {"rest_days": 0.006}   # 둘째 자리 반올림(0.005) + 부동소수 여유
 DEFAULT_TOLERANCE = 0.00006         # 넷째 자리 반올림(0.00005) + 여유
@@ -52,6 +52,32 @@ def reconcile(store, bucket: str, snapshot: str | None = None) -> dict:
               "columns_compared": len(columns), "missing_in_spark": len(expected.keys() - actual.keys()),
               "extra_in_spark": len(actual.keys() - expected.keys()), "mismatches": len(mismatches),
               "examples": mismatches[:5]}
+    result["nba"] = reconcile_nba(store, bucket, snapshot)
     result["passed"] = (result["missing_in_spark"] == result["extra_in_spark"] == result["mismatches"] == 0
-                        and result["rows_dbt"] > 0)
+                        and result["rows_dbt"] > 0 and result["nba"]["passed"])
+    return result
+
+
+NBA_TOLERANCE = {"win_pct": 0.00006, "avg_margin": 0.006}   # dbt는 승률을 넷째, 평균 득실 차를 둘째 자리에서 반올림
+
+
+def reconcile_nba(store, bucket: str, snapshot: str) -> dict:
+    """NBA 순위표(6b): dbt ↔ Spark를 (시즌, 팀) 단위로 모든 열 대조. 양쪽 다 NBA 자료가 없으면 통과(축구만 있는 환경)."""
+    key = lambda row: (row["season"], row["team"])
+    expected = {key(row): row for row in read_parquet(store, bucket, f"{PREFIX}/{snapshot}/dbt_nba_standings/")}
+    actual = {key(row): row for row in read_parquet(store, bucket, f"{NBA_OUTPUT_PREFIX}/snapshot={snapshot}/")}
+    columns = [*NBA_COUNTS, "win_pct", "avg_margin", "position"]
+
+    def equal(column, left, right):
+        if column in NBA_TOLERANCE:
+            return abs(float(left) - float(right)) <= NBA_TOLERANCE[column]
+        return int(left) == int(right)
+
+    mismatches = [{"season": k[0], "team": k[1], "column": column, "dbt": str(expected[k][column]), "spark": str(actual[k][column])}
+                  for k in sorted(expected.keys() & actual.keys()) for column in columns
+                  if not equal(column, expected[k][column], actual[k][column])]
+    result = {"rows_dbt": len(expected), "rows_spark": len(actual), "columns_compared": len(columns),
+              "missing_in_spark": len(expected.keys() - actual.keys()), "extra_in_spark": len(actual.keys() - expected.keys()),
+              "mismatches": len(mismatches), "examples": mismatches[:5]}
+    result["passed"] = result["missing_in_spark"] == result["extra_in_spark"] == result["mismatches"] == 0
     return result

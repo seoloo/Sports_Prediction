@@ -18,6 +18,7 @@ from .export import PARQUET, PREFIX
 
 AVAILABILITY_LAG_HOURS = 3   # 과거 재구성 가정: 결과는 시작 3시간 뒤에 알려짐(dbt 모델·dataset.py와 같은 값)
 OUTPUT_PREFIX = "spark/match_features_pit"
+NBA_OUTPUT_PREFIX = "spark/nba_standings"   # 6b
 
 
 def spark_session(app_name: str = "match_features_pit"):
@@ -71,6 +72,35 @@ def compute_features(matches, history):
     return home.join(away, "match_id").orderBy("kickoff_utc", "match_id")
 
 
+def compute_nba_standings(games):
+    """끝난 NBA 경기(game_id, season, postseason, home_team, away_team, home_score, away_score)로 정규 시즌 순위표(6b).
+
+    규칙은 dbt gold.nba_standings와 같다: 정규 시즌만, 승률 → 득실 차 → 팀 이름. dbt는 팀별로 펼친 Gold를 모으고,
+    여기서는 원자료를 직접 펼쳐 창 함수로 순위를 매긴다. 다른 엔진·다른 경로로 같은 규칙을 구현해 대조한다.
+    """
+    from pyspark.sql import Window
+    from pyspark.sql import functions as F
+
+    regular = games.where(~F.col("postseason"))
+    sides = (regular.select("season", F.col("home_team").alias("team"), F.col("home_score").alias("points_for"),
+                            F.col("away_score").alias("points_against"))
+             .unionByName(regular.select("season", F.col("away_team").alias("team"), F.col("away_score").alias("points_for"),
+                                         F.col("home_score").alias("points_against"))))
+    totals = sides.groupBy("season", "team").agg(
+        F.count(F.lit(1)).alias("played"),
+        F.count(F.when(F.col("points_for") > F.col("points_against"), True)).alias("won"),
+        F.count(F.when(F.col("points_for") < F.col("points_against"), True)).alias("lost"),
+        F.sum("points_for").cast("long").alias("points_for"),
+        F.sum("points_against").cast("long").alias("points_against"))
+    totals = (totals.withColumn("point_difference", F.col("points_for") - F.col("points_against"))
+              .withColumn("ratio", F.col("won") / F.col("played")))
+    order = Window.partitionBy("season").orderBy(F.col("ratio").desc(), F.col("point_difference").desc(), F.col("team"))
+    return (totals.withColumn("position", F.row_number().over(order))
+            .withColumn("win_pct", F.col("ratio"))
+            .withColumn("avg_margin", F.col("point_difference") / F.col("played"))
+            .drop("ratio").orderBy("season", "position"))
+
+
 def download_prefix(store, bucket: str, prefix: str, target: Path) -> int:
     """S3의 prefix 아래 객체를 같은 상대 경로로 내려받는다. 받은 파일 수를 돌려준다."""
     count = 0
@@ -102,7 +132,15 @@ def run(store, bucket: str, snapshot: str | None = None) -> dict:
         rows = features.count()
         put_if_absent(store, bucket, f"{output}/part-0.parquet", part.read_bytes(), {"rows": str(rows)},
                       content_type=PARQUET)
-        manifest = {"snapshot": snapshot, "rows": rows, "spark_version": spark.version,
+        nba_rows = 0
+        if (work / "input" / "nba_games").exists():   # NBA 자료가 없는 환경(테스트·CI)은 건너뛴다
+            standings = compute_nba_standings(spark.read.parquet(str(work / "input" / "nba_games")))
+            standings.coalesce(1).write.parquet(str(work / "nba_output"))
+            (nba_part,) = sorted((work / "nba_output").glob("part-*.parquet"))
+            nba_rows = standings.count()
+            put_if_absent(store, bucket, f"{NBA_OUTPUT_PREFIX}/snapshot={snapshot}/part-0.parquet", nba_part.read_bytes(),
+                          {"rows": str(nba_rows)}, content_type=PARQUET)
+        manifest = {"snapshot": snapshot, "rows": rows, "nba_standings_rows": nba_rows, "spark_version": spark.version,
                     "rule": f"result known at kickoff + {AVAILABILITY_LAG_HOURS}h", "key": f"{output}/part-0.parquet"}
         put_if_absent(store, bucket, f"{output}/_manifest.json", json.dumps(manifest).encode(), {"snapshot": snapshot})
     spark.stop()

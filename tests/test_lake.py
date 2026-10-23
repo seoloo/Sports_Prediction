@@ -105,3 +105,39 @@ def test_run_isolated_reports_success_and_fails_loudly(monkeypatch):
     monkeypatch.setattr(run.subprocess, "run", fake(1, "", "Java gateway process exited"))
     with pytest.raises(RuntimeError, match="Java gateway"):   # Spark가 아예 못 뜬 경우도 원인을 보여 준다
         run.run_isolated("all", python="/spark/python")
+
+
+def test_nba_standings_reconcile_detects_differences(lake):
+    """6b: NBA 순위표 대조. dbt 결과를 Spark 자리에 두면 통과, 순위 하나를 바꾸면 그 칸만 불일치."""
+    from datetime import timezone
+    from pipelines.ingest import balldontlie
+    from pipelines.lake.spark_features import NBA_OUTPUT_PREFIX
+    from tests.test_balldontlie import CELTICS, KNICKS, game, page
+    s, store = lake
+    balldontlie.ingest("2025-26", pages=[page([game(1, home=CELTICS, away=KNICKS), game(2, home=KNICKS, away=CELTICS,
+                                                                                    home_score=101, away_score=99, day="2025-10-25")])],
+                       settings=s, received_at=datetime(2025, 10, 27, tzinfo=timezone.utc))
+    build(s)
+    with psycopg.connect(s.postgres_conninfo) as conn:
+        manifest = export.export(conn, store, TEST_LAKE_BUCKET)
+    snapshot = manifest["snapshot"]
+    assert manifest["tables"]["nba_games"]["rows"] == 2 and manifest["tables"]["dbt_nba_standings"]["rows"] == 2
+    key = manifest["tables"]["dbt_nba_standings"]["files"][0]["key"]
+    payload = store.get_object(Bucket=TEST_LAKE_BUCKET, Key=key)["Body"].read()
+    target = f"{NBA_OUTPUT_PREFIX}/snapshot={snapshot}/part-0.parquet"
+
+    def as_spark_output(rows):
+        """Spark 결과처럼 시즌을 파일 안의 열로(dbt 내보내기는 시즌을 경로 season=…에 둔다)."""
+        import pyarrow as pa
+        schema = pa.schema([("season", pa.string()), *export.TABLES["dbt_nba_standings"][1]])
+        return export.to_parquet([("2025-26", *row.values()) for row in rows], schema)
+
+    table = pq.read_table(io.BytesIO(payload)).to_pylist()
+    store.put_object(Bucket=TEST_LAKE_BUCKET, Key=target, Body=as_spark_output(table))
+    result = reconcile.reconcile_nba(store, TEST_LAKE_BUCKET, snapshot)
+    assert result["passed"] and result["rows_dbt"] == result["rows_spark"] == 2 and result["columns_compared"] == 9
+
+    table[0]["position"], table[1]["position"] = table[1]["position"], table[0]["position"]   # 순위를 뒤바꿈
+    store.put_object(Bucket=TEST_LAKE_BUCKET, Key=target, Body=as_spark_output(table))
+    result = reconcile.reconcile_nba(store, TEST_LAKE_BUCKET, snapshot)
+    assert not result["passed"] and result["mismatches"] == 2 and {e["column"] for e in result["examples"]} == {"position"}

@@ -72,3 +72,27 @@ def test_rest_days_and_last_feature_kickoff(spark):
     (row,) = compute_features(match_frame, history_frame).collect()
     assert row["home_rest_days"] == pytest.approx(4.5) and row["away_rest_days"] == pytest.approx(10.0)
     assert row["home_last_feature_kickoff"].replace(tzinfo=timezone.utc) == T - timedelta(days=4, hours=12)
+
+
+def test_nba_standings_rank_by_win_pct_then_margin_then_name(spark):
+    """6b: 정규 시즌만, 승률 → 득실 차 → 팀 이름. 독립 계산(아래 Python)과 같아야 한다."""
+    from pipelines.lake.spark_features import compute_nba_standings
+    games = [(1, "2025-26", False, "A", "B", 110, 100), (2, "2025-26", False, "B", "C", 99, 101),
+             (3, "2025-26", False, "C", "A", 90, 95), (4, "2025-26", False, "D", "B", 120, 115),
+             (5, "2025-26", True, "B", "A", 130, 80)]   # 포스트시즌은 제외
+    frame = spark.createDataFrame(games, "game_id long, season string, postseason boolean, home_team string, "
+                                         "away_team string, home_score int, away_score int")
+    rows = {row["team"]: row.asDict() for row in compute_nba_standings(frame).collect()}
+    totals = {}
+    for _, _, post, home, away, hs, as_ in games:
+        if post:
+            continue
+        for team, pf, pa in ((home, hs, as_), (away, as_, hs)):
+            t = totals.setdefault(team, {"played": 0, "won": 0, "pf": 0, "pa": 0})
+            t["played"] += 1; t["won"] += pf > pa; t["pf"] += pf; t["pa"] += pa
+    order = sorted(totals, key=lambda team: (-totals[team]["won"] / totals[team]["played"],
+                                             -(totals[team]["pf"] - totals[team]["pa"]), team))
+    assert [team for team, _ in sorted(rows.items(), key=lambda kv: kv[1]["position"])] == order
+    assert rows["A"]["won"] == 2 and rows["A"]["lost"] == 0 and rows["A"]["point_difference"] == 15   # 포스트시즌 50점 차 패배 제외
+    assert rows["D"]["position"] == 2 and rows["C"]["position"] == 3    # D·C 모두 1승 이상: 승률 1.0(D) > 0.5(C)
+    assert rows["B"]["win_pct"] == pytest.approx(0.0) and rows["B"]["avg_margin"] == pytest.approx(-17 / 3)
