@@ -2,69 +2,55 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>05 매치데이 자동 분석 주기</title>
+<title>05 경기 주기 자동화</title>
 <link rel="stylesheet" href="style.css">
 <style>
-  .cycle { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 16px; padding-top: 66px; }
-  .rail { position: absolute; left: 20px; right: 20px; top: 92px; height: 4px; border-radius: 2px;
-          background: linear-gradient(90deg, var(--primary) 0 57%, var(--done) 57% 100%); opacity: .35; }
-  .deadline { position: absolute; left: calc(57% - 1px); top: 18px; bottom: -6px; border-left: 3px dashed var(--warn); }
-  .deadline span { position: absolute; top: 0; left: 50%; transform: translateX(-50%); white-space: nowrap;
-                   background: var(--warn); color: #fff; font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 999px; }
-  .node { position: relative; text-align: center; }
-  .dot { width: 22px; height: 22px; border-radius: 50%; margin: 15px auto 18px; background: #fff; border: 4px solid var(--primary); position: relative; z-index: 1; }
-  .node.post .dot { border-color: var(--done); }
-  .when { font-size: 13px; font-weight: 800; color: var(--primary); letter-spacing: .02em; }
-  .node.post .when { color: var(--done); }
-  .node .card { padding: 14px 13px; min-height: 190px; text-align: left; display: flex; flex-direction: column; }
-  .node .card h3 { font-size: 15.5px; margin-bottom: 6px; }
-  .node .card p { font-size: 13px; line-height: 1.55; }
-  .node .card .by { margin-top: auto; padding-top: 10px; display: flex; gap: 5px; flex-wrap: wrap; }
-  .bottom { margin-top: 26px; display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; }
-  .bottom .card h3 { font-size: 17px; margin-bottom: 8px; }
-  .bottom li { font-size: 13.5px; margin-bottom: 4px; }
-  .why { background: #1e2433; border: none; }
-  .why h3 { color: #fff; }
-  .why p { color: rgba(255,255,255,.85); font-size: 14px; line-height: 1.65; }
-  .why b { color: #fff; }
+  .timeline { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 14px; margin-top: 8px; }
+  .timeline::before { content: ""; position: absolute; left: 20px; right: 20px; top: 21px; height: 3px; background: linear-gradient(90deg, var(--primary), var(--done)); opacity: .35; }
+  .point { position: relative; }
+  .dot { width: 16px; height: 16px; border-radius: 50%; background: var(--primary); border: 4px solid #fff; box-shadow: 0 0 0 2px var(--primary); margin: 14px auto 14px; position: relative; z-index: 1; }
+  .point.after .dot { background: var(--done); box-shadow: 0 0 0 2px var(--done); }
+  .when { text-align: center; font-size: 13px; font-weight: 800; color: var(--primary); margin-bottom: 8px; }
+  .point.after .when { color: var(--done); }
+  .step { padding: 14px 14px; min-height: 240px; display: flex; flex-direction: column; }
+  .step h3 { font-size: 15.5px; margin-bottom: 6px; }
+  .step p { font-size: 12.8px; line-height: 1.5; }
+  .step .tags { margin-top: auto; display: flex; flex-wrap: wrap; gap: 5px; padding-top: 10px; }
+  .why { margin-top: 20px; display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; }
+  .why .card { padding: 16px 20px; }
+  .why h3 { font-size: 16px; }
+  .why p { font-size: 13.5px; }
+  .dark { background: #1e2433; border: none; }
+  .dark h3, .dark p { color: #fff; }
+  .dark p { color: rgba(255,255,255,.82); }
 </style>
 </head>
 <body>
   <div class="header">
     <div>
-      <div class="eyebrow">Matchday Automation · Near Real-time</div>
-      <h1>매주 경기에 맞춰 스스로 도는 분석</h1>
-      <div class="subtitle">일정·배당·결과가 들어오는 대로 분 단위로 갱신합니다. 사람이 매번 실행하지 않아도 경기 전 입력과 경기 후 결과가 쌓입니다.</div>
+      <div class="eyebrow">Matchday Automation · Prospective</div>
+      <h1>경기마다 스스로 도는 기록과 채점</h1>
+      <div class="subtitle">사람이 매번 실행하지 않아도 경기 전 입력·예측·배당 비교가 쌓이고, 경기 후 결과로 채점됩니다. 축구 5개 리그와 NBA가 같은 규칙으로 돕니다.</div>
     </div>
-    <div class="stamp legend"><span class="chip next">● 경기 전: 입력 고정</span><span class="chip done">● 경기 후: 검증</span><span class="chip done">구현</span><span class="chip">3·4단계 예정</span></div>
+    <div class="stamp legend"><span class="chip next">● 경기 전: 고정</span><span class="chip done">● 경기 후: 채점</span></div>
   </div>
 
-  <div class="cycle">
-    <div class="rail"></div>
-    <div class="deadline"><span>경기 시작</span></div>
-
-    <div class="node"><div class="when">매일</div><div class="dot"></div>
-      <div class="card"><h3>일정 수집 <span class="chip done" style="font-size:11px;padding:2px 8px">구현</span></h3><p>다음 경기 일정과 일정 변경을 가져와 새 버전으로 저장</p><div class="by"><span class="code">Airflow</span></div></div></div>
-    <div class="node"><div class="when">시작 24시간 전</div><div class="dot"></div>
-      <div class="card"><h3>첫 스냅샷 <span class="chip done" style="font-size:11px;padding:2px 8px">구현</span></h3><p>그 시점에 알려진 경기 정보·최근 5경기·배당만으로 입력을 고정해 저장</p><div class="by"><span class="code">Airflow</span></div></div></div>
-    <div class="node"><div class="when">입력이 바뀔 때</div><div class="dot"></div>
-    <div class="node"><div class="when">시작 3시간·1시간 전</div><div class="dot"></div>
-      <div class="card"><h3>마지막 스냅샷 <span class="chip done" style="font-size:11px;padding:2px 8px">구현</span></h3><p>시작 직전 정보까지 반영한 입력. 90분 안에 못 찍으면 MISSED로 남기고 채우지 않음</p><div class="by"><span class="code">Airflow</span></div></div></div>
-    <div class="node post"><div class="when">경기 중</div><div class="dot"></div>
-      <div class="card"><h3>결과 폴링 <span class="chip done" style="font-size:11px;padding:2px 8px">구현</span></h3><p>대회별로 묶어 수 분 간격 조회. 분당 10회 요청 한도를 지키고 429 응답이면 대기</p><div class="by"><span class="code">Kafka</span></div></div></div>
-    <div class="node post"><div class="when">경기 종료 후</div><div class="dot"></div>
-      <div class="card"><h3>확정·채점 <span class="chip" style="font-size:11px;padding:2px 8px">채점 3단계</span></h3><p>결과 버전 저장은 구현. 경기 전 예측 채점은 모델이 생기는 3단계에서</p><div class="by"><span class="code">Kafka</span><span class="code">Postgres</span></div></div></div>
-    <div class="node post"><div class="when">매주</div><div class="dot"></div>
-      <div class="card"><h3>성능 보고서 <span class="chip" style="font-size:11px;padding:2px 8px">3·4단계</span></h3><p>Log loss·Brier·보류율을 기준 모델·시장 배당과 비교하고 휴대폰으로 알림</p><div class="by"><span class="code">Airflow</span><span class="code">dbt</span></div></div></div>
+  <div class="timeline">
+    <div class="point"><div class="when">매일</div><div class="dot"></div>
+      <div class="card step"><h3>일정·결과 수집</h3><p>축구 06:00 UTC(5개 리그 × 2시즌), NBA 12:00 UTC. 바뀐 경기만 새 버전, 소스 점수 오류는 품질 문제로 차단</p><div class="tags"><span class="chip done">Airflow</span><span class="chip done">dbt</span><span class="chip done">Spark 대조</span></div></div></div>
+    <div class="point"><div class="when">시작 24·1시간 전 직전</div><div class="dot"></div>
+      <div class="card step"><h3>해외 배당 수집</h3><p>축구는 경기 시각 묶음마다, NBA는 그날 첫 경기 전 하루 1번. 크레딧이 모자라면 줄이고, 핸디캡·언더오버는 요청할 때만</p><div class="tags"><span class="chip done">The Odds API</span><span class="chip warn">월 500</span></div></div></div>
+    <div class="point"><div class="when">시작 24·3·1시간 전</div><div class="dot"></div>
+      <div class="card step"><h3>입력 스냅샷</h3><p>그 순간 알려진 경기 정보·최근 5경기·배당만 고정. 90분 안에 못 찍으면 MISSED로 남기고 나중에 채우지 않음</p><div class="tags"><span class="chip done">30분마다</span></div></div></div>
+    <div class="point"><div class="when">같은 순간</div><div class="dot"></div>
+    <div class="point"><div class="when">기록 직후</div><div class="dot"></div>
+    <div class="point after"><div class="when">경기 중·후</div><div class="dot"></div>
+      <div class="card step"><h3>결과 반영</h3><p>축구 실시간 상태는 Kafka로(분 단위), 늦은 이벤트·중복은 거부. 결과 정정은 새 버전</p><div class="tags"><span class="chip done">Kafka</span><span class="chip done">Postgres</span></div></div></div>
+    <div class="point after"><div class="when">매주 화요일</div><div class="dot"></div>
   </div>
 
-  <div class="bottom">
-    <div class="card why"><h3>왜 자동화가 필요한가</h3><p>과거 자료로 다시 만든 백테스트는 실제 수집 지연을 재현하지 못합니다. <b>경기 전에 실제로 저장한 입력과 예측</b>이 매주 쌓여야 모델 성능을 정직하게 말할 수 있습니다. 놓친 스냅샷은 나중에 만들지 않고 누락으로 기록합니다.</p></div>
-    <div class="card"><h3>범위와 한계</h3><ul>
-      <li>경기 중 실시간(인플레이) 예측은 하지 않습니다. 허용 조건이 확인된 경기 중 데이터가 없습니다.</li>
-      <li>무료 API의 요청 한도와 갱신 지연 때문에 초 단위가 아닌 분 단위입니다.</li>
-      <li>로컬 실행이라 PC가 켜져 있어야 합니다. 상시 실행 환경은 별도로 결정합니다.</li>
-    </ul></div>
+  <div class="why">
+    <div class="card dark"><h3>왜 경기 전에 실제로 기록하나</h3><p>과거 자료로 다시 만든 백테스트는 실제 수집 지연과 그때 없던 정보를 재현하지 못합니다. 경기 전에 실제로 저장한 입력과 예측이 쌓여야 성능을 정직하게 말할 수 있습니다. 과거 배당이 없는 NBA는 이 기록이 시장과 비교하는 유일한 길입니다.</p></div>
   </div>
 </body>
 </html>

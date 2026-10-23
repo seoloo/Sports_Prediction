@@ -1,26 +1,29 @@
 # Sports Prediction
 
 
+> **5분 요약:** 왜 만들었는지, 문제마다 어떤 설계를 했고 어떻게 확인했는지, 숫자와 정직한 결론은 [포트폴리오 요약](docs/portfolio.md)에 한 장으로 정리했습니다.
+
 
 ## 그림으로 보기
 
-![프로젝트 소개: 왜 시작했나, 어떤 기술을 왜 골랐나, 최종 목표](docs/images/01_overview.png)
+![프로젝트 소개: 왜 시작했나, 문제마다 고른 기술, 지금까지의 결과](docs/images/01_overview.png)
 
-![현재 구현된 데이터 흐름](docs/images/02_data_flow.png)
+![지금 돌아가는 데이터 흐름: 6개 소스에서 알림까지](docs/images/02_data_flow.png)
 
 ![시점 누수 방지: 그때 알 수 있던 것만 쓴다](docs/images/03_point_in_time.png)
 
-![해외축구 데이터 플랫폼 로드맵](docs/images/04_roadmap.png)
+![단계별 진행과 다음 계획](docs/images/04_roadmap.png)
 
-![매주 경기에 맞춰 스스로 도는 분석](docs/images/05_matchday_cycle.png)
+![경기마다 스스로 도는 기록과 채점](docs/images/05_matchday_cycle.png)
 
 그림 원본은 [docs/diagrams/](docs/diagrams/)의 HTML이고, `.\scripts\render_diagrams.ps1`로 PNG를 다시 만듭니다(설치된 Edge 또는 Chrome 사용).
 
 ## 구조
 
 ```text
-openfootball(일정·결과, 자동) ─────────┐
-football-data.co.uk(과거 배당 CSV) ────┼─ Airflow 매일 DAG ─┐
+openfootball(축구 일정·결과, 자동) ────┐
+balldontlie(NBA 일정·결과, 자동) ──────┤
+football-data.co.uk(과거 배당 CSV) ────┼─ Airflow DAG ──────┐
 The Odds API(다가올 경기 배당, 자동) ──┘                    │
 football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ──┼→ Bronze(SeaweedFS S3, 원본 그대로)
                                                                   → Gold(dbt, 순위·특징·배당 확률)
@@ -37,7 +40,7 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | Gold | dbt-core + dbt-postgres | 순위표, 시점 특징, 마진 제거 배당 확률, 품질 테스트 26개 |
 | 레이크 | Parquet(pyarrow) + Apache Spark 4 | Gold를 S3 `lake` 버킷으로 내보내고 Spark로 특징을 다시 계산해 dbt와 행 단위 대조 |
 | 오케스트레이션 | Apache Airflow 3 | 매일 수집·dbt·Spark 대조, 30분마다 경기 전 스냅샷, 주간 채점 |
-| 모델 | numpy(직접 구현) | 단순 비율·Poisson(ridge, 시간 감쇠)·Dixon-Coles, 주 단위 walk-forward 백테스트, 블록 부트스트랩 평가 |
+| 모델 | numpy(직접 구현) | 축구 단순 비율·Poisson(ridge, 시간 감쇠)·Dixon-Coles, NBA 점수 차 등급·Elo, 주 단위 walk-forward 백테스트, 블록 부트스트랩 평가 |
 | 알림 | 텔레그램 Bot API | 경기 전·주간·실패 알림, 보낸 기록으로 중복 방지 |
 | 실행·검증 | Docker Compose, GitHub Actions, pytest | 모든 포트 127.0.0.1, 푸시마다 전체 테스트·Spark 테스트·dbt build |
 
@@ -160,6 +163,7 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 
 | 문서 | 내용 |
 |---|---|
+| [포트폴리오 요약](docs/portfolio.md) | 왜 만들었나(당위성), 문제 → 설계 → 증거, 숫자, 정직한 결론, 설계 결정과 대안, 면접용 요약 |
 | [단계별 구현 해설](docs/walkthrough/README.md) | 단계마다 무엇을 왜 만들었는지, 사용한 기술, 확인 방법, 면접 질문 |
 | [면접 준비 문서](docs/interview/README.md) | 예외 처리, 메달리온, 검증 체계, 기술 스택 |
 | [데이터 플랫폼 로드맵](docs/de_platform_roadmap.md) | 단계·완료 기준·사용자 선행 조건 |

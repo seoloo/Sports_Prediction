@@ -2,91 +2,79 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>04 로드맵과 목표 아키텍처</title>
+<title>04 로드맵</title>
 <link rel="stylesheet" href="style.css">
 <style>
-  .arch { padding: 20px 22px; }
-  .lanes { display: grid; grid-template-columns: 1.15fr 1fr 1fr 1fr 1fr 1fr; gap: 28px; align-items: stretch; }
-  .col { position: relative; display: flex; flex-direction: column; gap: 8px; }
-  .col:not(:last-child)::after {
-    content: ""; position: absolute; right: -21px; top: 50%; width: 14px; height: 14px;
-    border-top: 3px solid var(--primary); border-right: 3px solid var(--primary);
-    transform: translateY(-50%) rotate(45deg); opacity: .5;
-  }
-  .col .label { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
-  .box { border-radius: 12px; padding: 10px 12px; font-size: 13.5px; line-height: 1.45; border: 1px solid var(--line); background: #fff; }
-  .box b { display: block; font-size: 14.5px; }
-  .box span { color: var(--muted); font-size: 12.5px; }
-  .box.done { border-color: #b7e6df; background: var(--done-soft); }
-  .box.next { border-color: #c9ccfb; background: var(--primary-soft); }
-  .box.plan { border-style: dashed; background: #fbfcfe; }
-  .bands { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .band { border-radius: 12px; padding: 9px 14px; font-size: 13.5px; border: 1px dashed var(--line); background: #fbfcfe; color: #475467; }
-  .band b { color: var(--ink); margin-right: 8px; }
-  .stages { margin-top: 20px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; position: relative; }
-  .stages::before { content: ""; position: absolute; left: 30px; right: 30px; top: 21px; height: 4px; background: linear-gradient(90deg, var(--done) 0 56%, var(--primary) 56% 78%, var(--line) 78% 100%); border-radius: 2px; }
-  .stage { position: relative; padding: 0 10px; }
-  .dot { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; background: #fff; border: 3px solid var(--line); color: var(--muted); position: relative; z-index: 1; }
-  .stage.done .dot { border-color: var(--done); background: var(--done); color: #fff; }
-  .stage.next .dot { border-color: var(--primary); color: var(--primary); }
-  .stage h4 { font-size: 16px; margin: 10px 0 4px; display: flex; gap: 8px; align-items: center; }
-  .stage p { font-size: 13px; color: #475467; line-height: 1.55; }
-  .stage .need { margin-top: 6px; font-size: 12px; color: var(--warn); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .stage { padding: 16px 18px; min-height: 238px; display: flex; flex-direction: column; }
+  .stage .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .stage .no { font-size: 13px; font-weight: 800; letter-spacing: .08em; color: var(--primary); }
+  .stage h3 { font-size: 17px; margin-bottom: 8px; }
+  .stage li { font-size: 13px; margin-bottom: 3px; line-height: 1.45; }
+  .stage .proof { margin-top: auto; padding-top: 10px; font-size: 12.5px; color: var(--done); font-weight: 700; }
+  .stage.next { border: 2px dashed #c9ccfb; background: #fbfbff; }
+  .stage.next .proof { color: var(--primary); }
+  .stage.plan { background: var(--plan-soft); border-color: var(--line); }
+  .stage.plan .proof { color: var(--muted); }
+  .stage.plan .chip { background: #fff; }
 </style>
 </head>
 <body>
   <div class="header">
     <div>
-      <div class="eyebrow">Roadmap · Target Architecture</div>
-      <h1>해외축구 데이터 플랫폼 로드맵</h1>
-      <div class="subtitle">기존 도메인 로직(검증·버전·시점 규칙)은 그대로 두고, 그 위에 데이터 엔지니어링 파이프라인을 단계별로 올립니다.</div>
+      <div class="eyebrow">Roadmap · Progress</div>
+      <h1>단계별 진행과 다음 계획</h1>
+      <div class="subtitle">한 단계마다 "무엇을 만들었나 · 어떻게 확인했나"를 해설 문서로 남겼습니다(docs/walkthrough). 아래 초록 글씨는 그 단계의 확인 결과입니다.</div>
     </div>
-    <div class="stamp legend"><span class="chip done">● 구현됨</span><span class="chip next">● 다음</span><span class="chip">○ 계획</span></div>
+    <div class="stamp legend"><span class="chip done">● 완료</span><span class="chip next">● 다음</span><span class="chip">○ 계획</span></div>
   </div>
 
-  <div class="card arch">
-    <div class="lanes">
-      <div class="col">
-        <div class="label">Sources</div>
-        <div class="box done"><b>openfootball</b><span>CC0 · 일정·전후반 점수 자동 수집</span></div>
-        <div class="box done"><b>football-data.co.uk</b><span>마감 배당 · 직접 내려받은 CSV만</span></div>
-        <div class="box done"><b>football-data.org</b><span>API · 분당 10회 · 경기 상황 맞춤 조회</span></div>
-      </div>
-      <div class="col">
-        <div class="label">Ingest</div>
-        <div class="box done"><b>배치 수집</b><span>Python · 원본 해시 · 멱등</span></div>
-      </div>
-      <div class="col">
-        <div class="label">Bronze</div>
-        <div class="box done"><b>SeaweedFS (S3)</b><span>원본 파일 그대로 + 내용 해시 경로</span></div>
-      </div>
-      <div class="col">
-        <div class="label">Silver</div>
-        <div class="box done"><b>PostgreSQL</b><span>경기·결과 버전, 팀 별칭, 품질 문제</span></div>
-        <div class="box done"><b>기존 도메인 로직</b><span>검증·as_of 선택·사용권</span></div>
-      </div>
-      <div class="col">
-        <div class="label">Gold</div>
-        <div class="box done"><b>dbt</b><span>순위표·시장 내재 확률, 품질 테스트, as_of 재계산</span></div>
-        <div class="box plan"><b>Spark</b><span>시점 기준 특징·백테스트 데이터셋 대량 계산</span></div>
-      </div>
-      <div class="col">
-        <div class="label">Model · Serve</div>
-        <div class="box next"><b>EPL 기준 모델</b><span>Poisson / Dixon-Coles, 시간순 검증</span></div>
-        <div class="box plan"><b>FastAPI · 모바일</b><span>예측 스냅샷 조회</span></div>
-      </div>
+  <div class="grid">
+    <div class="card stage">
+      <div class="top"><span class="no">STAGE 1</span><span class="chip done">완료</span></div>
+      <h3>배치 기반</h3>
+      <ul><li>Postgres·SeaweedFS(S3), 127.0.0.1 바인딩</li><li>openfootball·배당 CSV 수집, 원본 해시</li><li>dbt Gold·품질 테스트, Airflow, CI</li></ul>
+      <div class="proof">재수집 멱등 · dbt PASS 34</div>
     </div>
-    <div class="bands">
-      <div class="band" style="border-color:#b7e6df;background:var(--done-soft)"><b>⚙️ Airflow ✅</b>매일 수집 → dbt build · 30분마다 경기 전 스냅샷 · 재시도 (학습·평가는 3단계)</div>
-      <div class="band"><b>🐳 Docker Compose ✅ → ☸️ Kubernetes</b>로컬 127.0.0.1 개발 · GitHub Actions CI ✅ → kind/k3d + Helm 배포</div>
+    <div class="card stage">
+      <div class="top"><span class="no">STAGE 2</span><span class="chip done">완료</span></div>
+      <h3>스트리밍 · 경기 전 기록</h3>
+      <div class="proof">재생 후 최종 상태 = 원본</div>
     </div>
-  </div>
-
-  <div class="stages">
-    <div class="stage done"><div class="dot">0</div><h4>소스 검토 <span class="chip done">완료</span></h4><p>소스별 약관·역할 정리, 로드맵 작성</p></div>
-    <div class="stage done"><div class="dot">1</div><h4>배치 기반 <span class="chip done">완료</span></h4><p>Postgres·S3, openfootball·배당 CSV 수집, dbt 순위표·시장 확률, Airflow 매일 실행, CI</p></div>
-    <div class="stage next"><div class="dot">3</div><h4>모델·검증 <span class="chip next">다음</span></h4><p>EPL 기준 모델, 시간순 백테스트, Log loss·Brier, 시장 배당 비교</p></div>
-    <div class="stage"><div class="dot">4</div><h4>서빙·배포</h4><p>FastAPI, 모바일 화면, Kubernetes 배포, 모니터링</p><div class="need">외부 접속 방식 결정 필요</div></div>
+    <div class="card stage">
+      <div class="top"><span class="no">STAGE 3</span><span class="chip done">완료</span></div>
+      <h3>모델 · 검증</h3>
+      <div class="proof">누수 검사 불일치 0 · 모두 NOT_VALIDATED</div>
+    </div>
+    <div class="card stage">
+      <div class="top"><span class="no">STAGE 4</span><span class="chip done">일부 완료</span></div>
+      <h3>레이크 · 알림 · 배포</h3>
+      <ul><li>Parquet 레이크 + Spark 재계산·대조</li><li>텔레그램 알림(내보내기만)</li><li><span style="color:var(--muted)">○ Kubernetes 배포(미니 PC 도입 후)</span></li></ul>
+      <div class="proof">Spark ↔ dbt 불일치 0</div>
+    </div>
+    <div class="card stage">
+      <div class="top"><span class="no">STAGE 5</span><span class="chip done">완료</span></div>
+      <h3>확장: 5개 리그 + NBA</h3>
+      <ul><li>EPL·분데스리가·라리가·세리에A·에레디비시</li><li>The Odds API 배당(크레딧 예산), 리그별 모델</li><li>NBA 9시즌 수집·모델·경기 전 기록·주간 채점</li></ul>
+      <div class="proof">우승팀 대조 일치 · 소스 점수 오류 2건 차단</div>
+    </div>
+    <div class="card stage">
+      <div class="top"><span class="no">STAGE 6</span><span class="chip done">완료</span></div>
+      <h3>의사결정 도구</h3>
+      <div class="proof">경기 전 고정 · 결과로 채점</div>
+    </div>
+    <div class="card stage next">
+      <div class="top"><span class="no">NEXT</span><span class="chip next">다음</span></div>
+      <h3>데이터 신뢰성 강화</h3>
+      <ul><li>NBA·1X2도 dbt Gold·Spark 대조</li><li>데이터 신선도 검사(SLA)</li><li>Kafka 이벤트 스키마 계약 + 오류 큐</li></ul>
+      <div class="proof">여러 종목을 같은 규칙으로</div>
+    </div>
+    <div class="card stage plan">
+      <div class="top"><span class="no">LATER</span><span class="chip">계획</span></div>
+      <h3>레이크하우스 · 운영</h3>
+      <ul><li>Iceberg 테이블(스냅샷·시간 여행)</li><li>운영 대시보드(신선도·실패·크레딧·채점)</li><li>Kubernetes 배포</li></ul>
+      <div class="proof">시점 조회를 레이크까지</div>
+    </div>
   </div>
 </body>
 </html>

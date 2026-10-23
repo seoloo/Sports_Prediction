@@ -2,94 +2,86 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>02 현재 구현된 데이터 흐름</title>
+<title>02 현재 데이터 흐름</title>
 <link rel="stylesheet" href="style.css">
 <style>
-  .flow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 34px; position: relative; }
-  .step { position: relative; padding: 20px 18px 18px; min-height: 318px; display: flex; flex-direction: column; }
-  .step .num { width: 30px; height: 30px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
-  .step h3 { font-size: 17.5px; margin-bottom: 10px; }
-  .step li { font-size: 13.5px; margin-bottom: 3px; }
-  .step .files { margin-top: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding-top: 12px; }
-  .step:not(:last-child)::after {
-    content: ""; position: absolute; right: -27px; top: 50%; width: 20px; height: 20px;
+  .flow { display: grid; grid-template-columns: 255px 175px 200px 250px 250px 1fr; gap: 26px; position: relative; }
+  .col { display: flex; flex-direction: column; gap: 10px; position: relative; }
+  .col:not(:last-child)::after {
+    content: ""; position: absolute; right: -20px; top: 46%; width: 14px; height: 14px;
     border-top: 3px solid var(--primary); border-right: 3px solid var(--primary);
-    transform: translateY(-50%) rotate(45deg); opacity: .55;
+    transform: rotate(45deg); opacity: .5;
   }
-  .step.reject { border-color: #f7c4cc; }
-  .result { background: var(--stop-soft); border-color: #f7c4cc; }
-  .result .num { background: var(--stop); }
-  .store { margin-top: 26px; display: grid; grid-template-columns: 250px 1fr; gap: 22px; align-items: stretch; }
-  .store .title { background: #1e2433; color: #fff; border: none; display: flex; flex-direction: column; justify-content: center; }
-  .store .title h3 { color: #fff; font-size: 19px; }
-  .store .title p { color: rgba(255,255,255,.75); font-size: 13.5px; }
-  .tables { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-  .group { border: 1px dashed var(--line); border-radius: 14px; padding: 12px 14px; background: #fbfcfe; }
-  .group b { font-size: 13.5px; display: block; margin-bottom: 7px; }
-  .group .t { display: inline-block; font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; padding: 2px 7px; border-radius: 6px; margin: 0 4px 5px 0; background: var(--plan-soft); color: #344054; }
-  .group .t.lock { background: var(--done-soft); color: var(--done); }
-  .note { margin-top: 16px; display: flex; gap: 18px; font-size: 13px; color: var(--muted); }
+  .label { font-size: 12.5px; font-weight: 800; letter-spacing: .1em; color: var(--primary); text-transform: uppercase; }
+  .box { padding: 11px 13px; border-radius: 14px; }
+  .box h3 { font-size: 14.5px; margin-bottom: 2px; gap: 6px; }
+  .box p { font-size: 12.3px; line-height: 1.45; color: #475467; }
+  .box .n { font-size: 12px; font-weight: 700; color: var(--done); }
+  .manual { border-color: #f6d9a8; background: var(--warn-soft); }
+  .layer { background: #1e2433; border: none; }
+  .layer h3, .layer p { color: #fff; }
+  .layer p { color: rgba(255,255,255,.78); }
+  .layer .n { color: #7ee0d2; }
+  .t { display: inline-block; font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; margin: 3px 3px 0 0; background: var(--plan-soft); color: #344054; }
+  .layer .t { background: rgba(255,255,255,.12); color: #e4e7ef; }
+  .bars { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .bar { padding: 13px 18px; display: flex; gap: 14px; align-items: center; }
+  .bar .em { font-size: 24px; }
+  .bar b { font-size: 15px; }
+  .bar span { font-size: 13px; color: #475467; display: block; line-height: 1.5; }
+  .rule { margin-top: 14px; display: flex; gap: 22px; font-size: 13px; color: var(--muted); }
 </style>
 </head>
 <body>
   <div class="header">
     <div>
-      <div class="eyebrow">Current Implementation · Data Flow</div>
-      <h1>현재 구현된 데이터 흐름</h1>
-      <div class="subtitle">입력부터 기준 시각 재생까지. 한 단계라도 조건을 못 맞추면 저장을 거부하거나 보류 이유를 남깁니다.</div>
+      <div class="eyebrow">Current Architecture · Data Flow</div>
+      <h1>지금 돌아가는 데이터 흐름</h1>
+      <div class="subtitle">6개 소스 → 원본 보존 → 버전 저장 → 변환·검증 → 모델·경기 전 기록 → 알림. 모든 단계가 "그때 알 수 있던 것"만 씁니다.</div>
     </div>
-    <div class="stamp legend"><span class="chip done">● 구현됨</span><span class="chip stop">● 보류·거부</span></div>
+    <div class="stamp legend"><span class="chip done">● 자동</span><span class="chip warn">● 사람이 입력</span></div>
   </div>
 
   <div class="flow">
-    <div class="card step">
-      <div class="num">1</div>
-      <h3>소스 등록·사용권</h3>
-      <ul><li>출처·약관 URL·근거 기록</li><li>승인 안 된 소스는 PENDING → 입력 불가</li><li>학습용·공식 확인용 권한 별도 승인</li></ul>
-      <div class="files"><span class="code">catalog.py</span><span class="code">evidence.py</span></div>
+    <div class="col">
+      <div class="label">Sources</div>
+      <div class="card box"><h3>openfootball</h3><p>CC0 · 축구 5개 리그 일정·결과(매일)</p></div>
+      <div class="card box"><h3>football-data.org</h3><p>실시간 경기 상태 · 분당 10회 한도</p></div>
+      <div class="card box"><h3>The Odds API</h3><p>해외 배당 · 월 500크레딧 예산(경기 24·1시간 전, NBA 하루 1번, 핸디캡·언더오버는 요청 시)</p></div>
+      <div class="card box"><h3>balldontlie</h3><p>NBA 일정·결과 · 분당 5회</p></div>
     </div>
-    <div class="card step">
-      <div class="num">2</div>
-      <h3>입력</h3>
-      <div class="files"><span class="code">app.py</span><span class="code">bulk_import.py</span></div>
+    <div class="col">
+      <div class="label">Ingest</div>
+      <div class="card box"><h3>배치 수집기</h3><p>요청 한도·429·크레딧, 키는 오류 메시지에서 제거</p></div>
+      <div class="card box"><h3>Kafka</h3><p>경기 갱신·직접 입력 이벤트, 중복·늦은 도착 거부, 과거 시즌 재생</p></div>
+      <div class="card box"><h3>품질 검사</h3><p>대조표로만 팀 연결, 문제는 버리지 않고 기록</p><span class="n">팀 별칭 461개</span></div>
     </div>
-    <div class="card step reject">
-      <div class="num">3</div>
-      <h3>검증 미리보기</h3>
-      <ul><li>열 이름·시간대·숫자 형식</li><li>미등록 경기·참가자 이름</li><li>파일 내 중복, 기존 값과 충돌</li><li><b style="color:var(--stop)">오류 1건이면 파일 전체 거부</b></li></ul>
-      <div class="files"><span class="code">catalog.py</span></div>
+    <div class="col">
+      <div class="label">Bronze</div>
+      <div class="card box layer"><h3>SeaweedFS (S3)</h3><p>받은 바이트 그대로, 내용 해시 경로, 같은 원본은 한 번만</p><span class="n">원본 274개</span><br><span class="t">sha256=….json</span></div>
     </div>
-    <div class="card step">
-      <div class="num">4</div>
-      <h3>원자적 저장</h3>
-      <ul><li>쓰기 잠금 + 트랜잭션 안에서 재검증</li><li>원본 바이트·SHA-256 보관</li><li>같은 파일 재입력은 건너뜀</li><li>변경은 새 버전 행 추가</li></ul>
-      <div class="files"><span class="code">catalog.py</span><span class="code">history.py</span></div>
+    <div class="col">
+      <div class="label">Silver</div>
+      <div class="card box layer"><h3>PostgreSQL 버전 테이블</h3><p>덮어쓰지 않고 추가만, 수정·삭제는 트리거가 차단, published_at · received_at</p>
+      <div class="card box"><h3>마이그레이션 18개</h3><p>스키마 변경을 순서대로 기록, advisory lock</p></div>
     </div>
-    <div class="card step">
-      <div class="num">5</div>
-      <h3>기준 시각 재생</h3>
-      <ul><li>as_of 시점에 알려진 버전만 선택</li><li>입력 스냅샷 (INPUT_REPLAY)</li><li>특징 스냅샷 (FEATURE_REPLAY)</li><li>결과 대조: MATCHED · PENDING · REVIEW_REQUIRED</li></ul>
-      <div class="files"><span class="code">history.py</span><span class="code">features.py</span></div>
+    <div class="col">
+      <div class="label">Gold · Lake</div>
+      <div class="card box"><h3>dbt</h3><p>순위표·시점 특징·배당 확률, 품질 테스트 26개, 과거 시점 재계산</p></div>
+      <div class="card box"><h3>Parquet + Spark</h3><p>Gold를 레이크로 내보내 Spark로 독립 재계산, dbt와 행 단위 대조</p><span class="n">불일치 0</span></div>
+      <div class="card box"><h3>백테스트 · 평가</h3><p>시간순 주 단위 재학습, 블록 부트스트랩, 검증 기준</p><span class="n">예측 60만 · 실행 589</span></div>
     </div>
-    <div class="card step result">
-      <div class="num">6</div>
-      <h3>예측 상태</h3>
-      <ul><li><b>WITHHELD</b> (확률 미제공)</li><li>MODEL_UNVALIDATED</li><li>UNKNOWN_RULE · NO_DATA 등 이유 함께 저장</li></ul>
-      <div class="files"><span class="code">rules.py</span><span class="code">evidence.py</span></div>
+    <div class="col">
+      <div class="label">Serve</div>
+      <div class="card box"><h3>경기 전 스냅샷</h3><p>24·3·1시간 전 입력 고정, 놓치면 MISSED, 예측은 WITHHELD로 기록</p></div>
+      <div class="card box"><h3>채점 · 알림</h3><p>주간 채점(시장 vs 모델), 텔레그램(내보내기만)</p></div>
     </div>
   </div>
 
-  <div class="store">
-    <div class="card title">
-      <h3>🗄️ SQLite 저장소</h3>
-      <p>data/sports.sqlite3 (내 데이터)<br>data/demo.sqlite3 (가상 예시)<br>DB 버전 v4, 전환 전 자동 백업</p>
-    </div>
-    <div class="card tables">
-      <div class="group"><b>버전 이력 (추가만)</b><span class="t lock">event_revisions</span><span class="t lock">market_revisions</span><span class="t lock">observation_revisions</span><span class="t lock">result_revisions</span></div>
-      <div class="group"><b>규칙·사용권·공식</b><span class="t lock">rule_versions</span><span class="t lock">source_permissions</span><span class="t lock">official_revisions</span><span class="t lock">feature_contracts</span></div>
-      <div class="group"><b>스냅샷·감사</b><span class="t lock">feature_snapshots</span><span class="t lock">comparison_snapshots</span><span class="t">audit_log</span></div>
-    </div>
+  <div class="bars">
+    <div class="card bar"><div class="em">⚙️</div><div><b>Airflow DAG 4개</b><span>매일 축구 수집 → dbt → Spark 대조 · 매일 NBA 수집 · 30분마다 배당·스냅샷·알림 · 매주 채점</span></div></div>
+    <div class="card bar"><div class="em">🐳</div><div><b>Docker Compose + GitHub Actions</b><span>모든 포트 127.0.0.1 · 푸시마다 테스트 373개, Spark 컨테이너 테스트, 수집→dbt 종단 실행</span></div></div>
   </div>
-  <div class="note"><span><span class="chip done">초록 표</span> 수정·삭제를 DB 트리거가 차단하는 불변 테이블</span><span>모든 시각은 UTC로 저장하고 화면에서는 한국시간으로 표시합니다.</span></div>
+  <div class="rule"><span>모든 시각은 UTC로 저장, 화면은 한국 시각</span><span>키·비밀번호는 .env에만(Git 제외)</span><span>검증 전 모델의 확률은 보여 주지 않음</span></div>
 </body>
 </html>
