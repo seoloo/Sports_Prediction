@@ -10,6 +10,7 @@
 | 원본 저장(Bronze) | SeaweedFS(S3 호환) + boto3 | 4.48 / 1.43.115 | 사용 중 |
 | 정제·분석 DB(Silver·Gold) | PostgreSQL + psycopg | 16.4 / 3.3.6 | 사용 중 |
 | 스트리밍 | Apache Kafka(KRaft) + confluent-kafka | 4.3.1 / 2.15.1 | 사용 중 |
+| 이벤트 계약 | JSON Schema 2020-12 + jsonschema | 4.26.0 | 사용 중(6c) |
 | 변환·품질 테스트 | dbt-core + dbt-postgres | 1.12.6 / 1.11.0 | 사용 중 |
 | 모델링 | numpy(Poisson·Dixon-Coles 직접 구현, NBA는 가중 ridge 점수 차 등급·Elo) | 2.5.4 | 사용 중(3b, NBA 5d-c) |
 | 오케스트레이션 | Apache Airflow(standalone, LocalExecutor) | 3.3.2 | 사용 중 |
@@ -89,7 +90,8 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
   - 힙 512MB로 제한: 노트북에서 다른 서비스와 함께 돌리기 위해.
 - **왜 Kafka 트랜잭션(exactly-once)을 안 썼나:** Kafka의 exactly-once는 Kafka 안(읽기→쓰기)에서만 보장된다. 이 프로젝트의 최종 저장소는 Postgres라, 어차피 Postgres 쪽에서 중복을 걸러야 한다. 그래서 "최소 한 번 + 멱등 저장"이 더 단순하고 정확하다.
 - **대안:** Redpanda(Kafka 호환, 가볍다)도 가능했지만, 면접에서 설명할 표준 구성과 공식 이미지를 택했다. 클라이언트는 kafka-python 대신 librdkafka 기반으로 멱등 생산자를 제대로 지원하는 confluent-kafka를 썼다.
-- **쓰는 곳:** `pipelines/streaming/`(events, kafka_io, match_consumer, replay), `infra/docker-compose.yml`.
+- **이벤트 계약과 오류 큐(6c):** 메시지 모양을 JSON Schema 파일(`pipelines/streaming/schemas/`)로 정하고 생산자·소비자가 같은 파일로 검사한다. 겉봉투는 엄격(모르는 필드 거부), 내용은 선택 필드 추가만 같은 버전에서 허용, 의미가 바뀌면 버전을 올린다. 위반 원본은 `<토픽>.dlq`로 옮기고(헤더에 사유·원래 위치), 오류 큐 flush를 확인한 뒤에 DB·오프셋을 커밋한다. Confluent Schema Registry는 생산자 하나·이벤트 종류 하나인 지금은 과해서, 스키마를 코드와 같은 커밋으로 관리한다.
+- **쓰는 곳:** `pipelines/streaming/`(events, contracts, schemas, kafka_io, match_consumer, dlq, replay), `infra/docker-compose.yml`.
 
 ### dbt-core 1.12.6 + dbt-postgres 1.11.0 (Gold)
 

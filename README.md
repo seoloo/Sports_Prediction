@@ -40,7 +40,7 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | 수집 | Python 표준 라이브러리 urllib, confluent-kafka | 소스별 요청 한도·크레딧 예산을 지키며 수집, 원본은 바이트 그대로 보존 |
 | Bronze | SeaweedFS(S3 API) + boto3 | 내용 해시 경로(`sha256=….json`)로 한 번만 저장 |
 | Silver | PostgreSQL 16 + psycopg 3 | `*_revisions` 버전 테이블, 수정·삭제를 트리거로 차단, `published_at`·`received_at` 두 시각으로 시점 조회(`*_known_at(as_of)`) |
-| 스트리밍 | Apache Kafka 4(KRaft) | 경기 갱신 이벤트, 중복·늦은 도착 처리, 과거 시즌 재생, DB 커밋 후 오프셋 커밋 |
+| 스트리밍 | Apache Kafka 4(KRaft) | 경기 갱신 이벤트, JSON Schema 계약 검사·오류 큐(dead letter), 중복·늦은 도착 처리, 과거 시즌 재생, DB 커밋 후 오프셋 커밋 |
 | Gold | dbt-core + dbt-postgres | 순위표, 시점 특징, 마진 제거 배당 확률, 품질 테스트 38개 |
 | 레이크 | Parquet(pyarrow) + Apache Spark 4 | Gold를 S3 `lake` 버킷으로 내보내고 Spark로 특징을 다시 계산해 dbt와 행 단위 대조 |
 | 오케스트레이션 | Apache Airflow 3 | 매일 수집·dbt·Spark 대조, 30분마다 경기 전 스냅샷, 주간 채점 |
@@ -76,6 +76,7 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | 5e | 주간 채점 보고서·텔레그램 요약에 NBA(경기 전 확률 vs 같은 시점 시장 확률) | [5e](docs/walkthrough/5e_weekly_nba.md) |
 | 6a | NBA dbt Gold(순위표·배당 확률) + 수집기별 데이터 신선도 검사(SLA) | [6a](docs/walkthrough/6a_nba_gold_freshness.md) |
 | 6b | NBA 순위표를 Spark로 원자료부터 다시 계산해 dbt와 대조(불일치 0) | [6b](docs/walkthrough/6b_nba_spark_reconcile.md) |
+| 6c | Kafka 이벤트 JSON Schema 계약(생산자·소비자 양쪽 검사) + 오류 큐(dead letter)·다시 보내기 | [6c](docs/walkthrough/6c_kafka_contracts.md) |
 
 평가 결과(시험 시즌 2023-24 이후, 로그 손실이 낮을수록 좋음):
 
@@ -161,6 +162,7 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 | 과거 배당 CSV 반영(직접 받은 파일, `data/landing/football-data-co-uk/`) | `.\.venv\Scripts\python.exe -m pipelines.ingest.football_data_co_uk` |
 | dbt(별도 가상환경 `.venv-dbt`) | `.\.venv\Scripts\python.exe -m pipelines.dbt_runner build` |
 | 데이터 신선도 검사(수집이 멈췄는지) | `.\.venv\Scripts\python.exe -m pipelines.dbt_runner source freshness` |
+| Kafka 오류 큐 요약 / 대조표를 고친 뒤 다시 보내기 | `.\.venv\Scripts\python.exe -m pipelines.streaming.dlq summary` / `... dlq replay` |
 | 과거 시점으로 Gold 다시 계산 | `.\.venv\Scripts\python.exe -m pipelines.dbt_runner build --vars "{as_of: '2025-01-01T00:00:00Z'}"` |
 
 ### 5. 테스트

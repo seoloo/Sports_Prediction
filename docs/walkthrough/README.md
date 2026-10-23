@@ -28,5 +28,6 @@
 | 5e | [주간 보고서에 NBA](5e_weekly_nba.md) | 경기 전에 얼린 배당으로 하는 시장 비교, 과거 배당 없이 검증하는 방법 |
 | 6a | [NBA Gold·데이터 신선도](6a_nba_gold_freshness.md) | 여러 종목 Gold, "데이터가 바뀌었나"와 "수집이 돌았나"를 나눈 신선도 검사, Windows가 포트를 예약해 막힌 사건 |
 | 6b | [NBA Spark 대조](6b_nba_spark_reconcile.md) | 순위 규칙까지 두 엔진이 따로 구현해 칸 단위로 맞추기, 원자료에서 시작해야 독립 검증인 이유 |
+| 6c | [Kafka 계약과 오류 큐](6c_kafka_contracts.md) | JSON Schema 계약과 호환 규칙, 생산자·소비자 양쪽 검사, 오류 큐 순서 보장, 실제 원본에서 찾은 출처 오류 21건 |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md), 주제별(예외 처리·메달리온·기술 스택) 정리는 [면접 준비 문서](../interview/README.md)를 함께 보세요.

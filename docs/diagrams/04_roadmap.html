@@ -60,15 +60,15 @@
       <ul><li>EPL·분데스리가·라리가·세리에A·에레디비시</li><li>The Odds API 배당(크레딧 예산), 리그별 모델</li><li>NBA 9시즌 수집·모델·경기 전 기록·주간 채점</li></ul>
       <div class="proof">우승팀 대조 일치 · 소스 점수 오류 2건 차단</div>
     </div>
-    <div class="card stage next">
-      <div class="top"><span class="no">STAGE 6</span><span class="chip next">진행 중</span></div>
+    <div class="card stage">
+      <div class="top"><span class="no">STAGE 6</span><span class="chip done">완료</span></div>
       <h3>데이터 신뢰성 강화</h3>
-      <ul><li><b>✓</b> NBA dbt Gold · 신선도 검사(6a)</li><li><b>✓</b> NBA Spark 대조 불일치 0(6b)</li><li>Kafka 이벤트 스키마 계약 + 오류 큐(6c)</li></ul>
-      <div class="proof">여러 종목을 같은 규칙으로</div>
+      <ul><li>NBA dbt Gold · 신선도 검사(SLA)</li><li>NBA 순위표 Spark 독립 재계산·대조</li><li>Kafka JSON Schema 계약 + 오류 큐</li></ul>
+      <div class="proof">불일치 0 · 출처 오류 21건 차단</div>
     </div>
-    <div class="card stage plan">
-      <div class="top"><span class="no">LATER</span><span class="chip">계획</span></div>
-      <h3>레이크하우스</h3>
+    <div class="card stage next">
+      <div class="top"><span class="no">NEXT</span><span class="chip next">다음</span></div>
+      <h3>레이크하우스(7a)</h3>
       <ul><li>Iceberg 테이블(스냅샷·시간 여행)</li><li>Parquet 내보내기를 Iceberg 쓰기로</li><li>dbt·Spark가 같은 테이블을 읽기</li></ul>
       <div class="proof">시점 조회를 레이크까지</div>
     </div>

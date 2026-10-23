@@ -54,7 +54,7 @@
     <div class="col">
       <div class="label">Ingest</div>
       <div class="card box"><h3>배치 수집기</h3><p>요청 한도·429·크레딧, 키는 오류 메시지에서 제거</p></div>
-      <div class="card box"><h3>Kafka</h3><p>경기 갱신 이벤트, 중복·늦은 도착 거부, 과거 시즌 재생</p></div>
+      <div class="card box"><h3>Kafka</h3><p>경기 갱신 이벤트, JSON Schema 계약 검사(위반은 오류 큐), 중복·늦은 도착 거부, 과거 시즌 재생</p></div>
       <div class="card box"><h3>품질 검사</h3><p>대조표로만 팀 연결, 문제는 버리지 않고 기록</p><span class="n">팀 별칭 461개</span></div>
     </div>
     <div class="col">
@@ -83,7 +83,7 @@
 
   <div class="bars">
     <div class="card bar"><div class="em">⚙️</div><div><b>Airflow DAG 4개</b><span>매일 축구 수집 → dbt → Spark 대조 · 매일 NBA 수집 · 30분마다 배당·스냅샷·알림 · 매주 채점</span></div></div>
-    <div class="card bar"><div class="em">🐳</div><div><b>Docker Compose + GitHub Actions</b><span>모든 포트 127.0.0.1 · 푸시마다 테스트 202개, Spark 컨테이너 테스트, 수집→dbt 종단 실행</span></div></div>
+    <div class="card bar"><div class="em">🐳</div><div><b>Docker Compose + GitHub Actions</b><span>모든 포트 127.0.0.1 · 푸시마다 테스트 215개, Spark 컨테이너 테스트, 수집→dbt 종단 실행</span></div></div>
   </div>
   <div class="rule"><span>모든 시각은 UTC로 저장, 화면은 한국 시각</span><span>키·비밀번호는 .env에만(Git 제외)</span><span>검증 전 모델의 확률은 보여 주지 않음</span></div>
 </body>
