@@ -77,13 +77,13 @@
       <div class="label">Serve</div>
       <div class="card box"><h3>경기 전 스냅샷</h3><p>24·3·1시간 전 입력 고정, 놓치면 MISSED, 예측은 WITHHELD로 기록</p></div>
       <div class="card box"><h3>시장 기준 확률</h3><p>스냅샷에 얼린 배당에서 마진을 뺀 확률. 모델을 채점할 때 같은 시점의 비교 기준</p></div>
-      <div class="card box"><h3>채점 · 알림</h3><p>주간 채점(시장 vs 모델), 텔레그램(내보내기만)</p></div>
+      <div class="card box"><h3>채점 · 알림 · 운영 보고서</h3><p>주간 채점(시장 vs 모델), 텔레그램(내보내기만), 매일 운영 상태 한 장(OK/WARN/FAIL)</p></div>
     </div>
   </div>
 
   <div class="bars">
     <div class="card bar"><div class="em">⚙️</div><div><b>Airflow DAG 4개</b><span>매일 축구 수집 → dbt → Spark 대조 · 매일 NBA 수집 · 30분마다 배당·스냅샷·알림 · 매주 채점</span></div></div>
-    <div class="card bar"><div class="em">🐳</div><div><b>Docker Compose + GitHub Actions</b><span>모든 포트 127.0.0.1 · 푸시마다 테스트 217개, Spark 컨테이너 테스트, 수집→dbt 종단 실행</span></div></div>
+    <div class="card bar"><div class="em">🐳</div><div><b>Docker Compose + GitHub Actions</b><span>모든 포트 127.0.0.1 · 푸시마다 테스트 220개, Spark 컨테이너 테스트, 수집→dbt 종단 실행</span></div></div>
   </div>
   <div class="rule"><span>모든 시각은 UTC로 저장, 화면은 한국 시각</span><span>키·비밀번호는 .env에만(Git 제외)</span><span>검증 전 모델의 확률은 보여 주지 않음</span></div>
 </body>

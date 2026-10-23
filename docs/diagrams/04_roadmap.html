@@ -66,16 +66,16 @@
       <ul><li>NBA dbt Gold · 신선도 검사(SLA)</li><li>NBA 순위표 Spark 독립 재계산·대조</li><li>Kafka JSON Schema 계약 + 오류 큐</li></ul>
       <div class="proof">불일치 0 · 출처 오류 21건 차단</div>
     </div>
-    <div class="card stage next">
-      <div class="top"><span class="no">STAGE 7</span><span class="chip next">진행 중</span></div>
-      <h3>레이크하우스</h3>
-      <ul><li><b>✓</b> Iceberg 테이블 스냅샷 · 시간 여행(7a)</li><li><b>✓</b> 옛 스냅샷 = dbt 시점 재계산</li><li><b>✓</b> Spark가 같은 카탈로그로 읽고 쓰기(7b)</li></ul>
-      <div class="proof">시점 조회를 레이크까지</div>
+    <div class="card stage">
+      <div class="top"><span class="no">STAGE 7</span><span class="chip done">완료</span></div>
+      <h3>레이크하우스 · 운영</h3>
+      <ul><li>Iceberg 스냅샷 · 시간 여행 = dbt 시점 재계산</li><li>Spark가 같은 카탈로그로 읽고 쓰기</li><li>운영 상태 보고서(OK/WARN/FAIL)</li></ul>
+      <div class="proof">Spark ↔ dbt 불일치 0 · 매일 자동 검사</div>
     </div>
-    <div class="card stage plan">
-      <div class="top"><span class="no">LATER</span><span class="chip">계획</span></div>
-      <h3>운영 · 배포</h3>
-      <ul><li>운영 대시보드(신선도·실패·크레딧·채점)</li><li>미니 PC 상시 운영</li><li>Kubernetes 배포</li></ul>
+    <div class="card stage next">
+      <div class="top"><span class="no">NEXT</span><span class="chip next">다음</span></div>
+      <h3>상시 운영 · 배포</h3>
+      <ul><li>로컬 Kubernetes(kind)에 수집기·소비자</li><li>미니 PC 상시 운영</li><li>운영 보고서 추세</li></ul>
       <div class="proof">PC가 꺼져도 도는 운영</div>
     </div>
   </div>

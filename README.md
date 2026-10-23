@@ -79,6 +79,7 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | 6c | Kafka 이벤트 JSON Schema 계약(생산자·소비자 양쪽 검사) + 오류 큐(dead letter)·다시 보내기 | [6c](docs/walkthrough/6c_kafka_contracts.md) |
 | 7a | Iceberg 레이크하우스: 내보내기마다 테이블 스냅샷, 내보내기 ID·시각으로 시간 여행, dbt 시점 재계산과 일치 | [7a](docs/walkthrough/7a_iceberg_lakehouse.md) |
 | 7b | Spark가 같은 카탈로그로 Iceberg 테이블을 시간 여행으로 읽고 결과도 Iceberg로(jar 판·SHA-512 고정), 불일치 0 | [7b](docs/walkthrough/7b_spark_iceberg.md) |
+| 7c | 운영 상태 보고서: 신선도·수집 실패·크레딧·오류 큐·경기 전 기록·채점·레이크를 OK/WARN/FAIL로 한 장(HTML·JSON), 매일 자동 | [7c](docs/walkthrough/7c_ops_status.md) |
 
 평가 결과(시험 시즌 2023-24 이후, 로그 손실이 낮을수록 좋음):
 
@@ -165,6 +166,7 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 | dbt(별도 가상환경 `.venv-dbt`) | `.\.venv\Scripts\python.exe -m pipelines.dbt_runner build` |
 | 데이터 신선도 검사(수집이 멈췄는지) | `.\.venv\Scripts\python.exe -m pipelines.dbt_runner source freshness` |
 | Kafka 오류 큐 요약 / 대조표를 고친 뒤 다시 보내기 | `.\.venv\Scripts\python.exe -m pipelines.streaming.dlq summary` / `... dlq replay` |
+| 운영 상태 보고서 만들기(`data/ops/status.html`, 매일 DAG도 자동으로) | `.\.venv\Scripts\python.exe -m pipelines.ops.status` |
 | 과거 시점으로 Gold 다시 계산 | `.\.venv\Scripts\python.exe -m pipelines.dbt_runner build --vars "{as_of: '2025-01-01T00:00:00Z'}"` |
 
 ### 5. 테스트
