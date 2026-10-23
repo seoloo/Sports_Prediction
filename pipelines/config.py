@@ -40,7 +40,7 @@ class Settings:
     s3_access_key: str
     s3_secret_key: str
     bronze_bucket: str
-    kafka_bootstrap: str = "127.0.0.1:59092"
+    kafka_bootstrap: str = "127.0.0.1:45992"
     football_data_org_api_key: str | None = None  # 없으면 football-data.org 수집기를 실행할 수 없다(다른 기능은 동작)
     lake_bucket: str = "lake"   # 가공한 Parquet(Gold 내보내기·Spark 결과). 받은 원본만 두는 Bronze와 분리한다(4a)
     telegram_bot_token: str | None = None   # 없으면 알림을 보내지 않는다(NOT_CONFIGURED). 로그·오류에 찍지 않는다
@@ -71,12 +71,12 @@ def load_settings(env_path: Path = ENV_PATH) -> Settings:
         postgres_db=values.get("POSTGRES_DB", "sports"),
         postgres_user=values["POSTGRES_USER"],
         postgres_password=values["POSTGRES_PASSWORD"],
-        s3_endpoint_url=values.get("S3_ENDPOINT_URL", f"http://127.0.0.1:{values.get('S3_PORT', '59000')}"),
+        s3_endpoint_url=values.get("S3_ENDPOINT_URL", f"http://127.0.0.1:{values.get('S3_PORT', '45900')}"),
         s3_access_key=values["S3_ACCESS_KEY"],
         s3_secret_key=values["S3_SECRET_KEY"],
         bronze_bucket=values.get("BRONZE_BUCKET", "bronze"),
         # 컨테이너 안에서는 KAFKA_BOOTSTRAP=kafka:9092로 덮어쓴다.
-        kafka_bootstrap=values.get("KAFKA_BOOTSTRAP", f"127.0.0.1:{values.get('KAFKA_PORT', '59092')}"),
+        kafka_bootstrap=values.get("KAFKA_BOOTSTRAP", f"127.0.0.1:{values.get('KAFKA_PORT', '45992')}"),
         football_data_org_api_key=(values.get("FOOTBALL_DATA_ORG_API_KEY") or "").strip() or None,
         lake_bucket=values.get("LAKE_BUCKET", "lake"),
         telegram_bot_token=(values.get("TELEGRAM_BOT_TOKEN") or "").strip() or None,

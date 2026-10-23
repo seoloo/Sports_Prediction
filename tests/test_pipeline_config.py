@@ -15,7 +15,7 @@ def test_init_env_creates_random_secrets_once(tmp_path, monkeypatch):
     first.write_text(first.read_text(encoding="utf-8") + "# keep\n", encoding="utf-8")
     assert init_env(first) is False and first.read_text(encoding="utf-8").endswith("# keep\n")
     settings = load_settings(first)
-    assert settings.postgres_host == "127.0.0.1" and settings.s3_endpoint_url == "http://127.0.0.1:59000"
+    assert settings.postgres_host == "127.0.0.1" and settings.s3_endpoint_url == "http://127.0.0.1:45900"
     assert "connect_timeout=10" in settings.postgres_conninfo
 
 
