@@ -3,6 +3,7 @@
 Airflow DAG(prematch_snapshots)가 30분마다 run()을 부른다.
 - 경기마다 T-24H, T-3H, T-1H. 시점에서 90분 안이면 찍고(TAKEN), 늦었으면 MISSED로만 남긴다(decide 재사용).
 - 입력: 경기 정보, 양 팀 최근 5경기, 연전 여부(전날 경기, 일정은 미리 공개), 그 경기의 배당. 모두 as_of에 알려진 버전.
+- 같은 as_of로 모델 예측(nba_prospective)을 남긴다. 실패해도 입력 스냅샷은 지킨다.
 """
 import json
 from datetime import datetime, timedelta, timezone
@@ -62,14 +63,9 @@ def attach_prediction(conn, game_id: int, label: str, inputs: dict, as_of: datet
     return record_for_snapshot(conn, game_id, label, game, as_of, cache)
 
 
-    try:
-        with conn.transaction():
-    except Exception:   # noqa: BLE001 (비교 실패가 입력 스냅샷까지 잃게 하지 않는다)
-        return "FAILED"
-
-
 def run(*, now: datetime | None = None, settings=None) -> dict:
     """해야 할 NBA 스냅샷을 찍거나 MISSED로 기록한다. 같은 시각에 다시 불러도 새로 기록하지 않는다(멱등)."""
+    from .modeling.market import nba_odds_at
     now = now or datetime.now(timezone.utc)
     counts = {"TAKEN": 0, "MISSED": 0, "upcoming_games": 0, "recently_started_games": 0}
     cache = {}
@@ -88,7 +84,7 @@ def run(*, now: datetime | None = None, settings=None) -> dict:
                 for label, action in decide(tipoff, now, recorded).items():
                     due = tipoff - OFFSETS[label]
                     if action == "TAKE":
-                        inputs = build_inputs(games, target, odds_at(conn, game_id, now))
+                        inputs = build_inputs(games, target, nba_odds_at(conn, game_id, now))
                         conn.execute("""INSERT INTO snapshots.game_prematch_inputs
                                         (game_id, offset_label, tipoff_utc, due_at, status, as_of, inputs, inputs_hash, recorded_at)
                                         VALUES (%s, %s, %s, %s, 'TAKEN', %s, %s, %s, %s)""",
@@ -96,7 +92,6 @@ def run(*, now: datetime | None = None, settings=None) -> dict:
                         counts["TAKEN"] += 1
                         outcome = attach_prediction(conn, game_id, label, inputs, now, cache)
                         counts["PREDICTION_" + outcome] = counts.get("PREDICTION_" + outcome, 0) + 1
-                        counts["VALUE_" + value] = counts.get("VALUE_" + value, 0) + 1
                     else:
                         conn.execute("""INSERT INTO snapshots.game_prematch_inputs
                                         (game_id, offset_label, tipoff_utc, due_at, status, recorded_at)

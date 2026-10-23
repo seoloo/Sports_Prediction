@@ -1,3 +1,4 @@
+"""5d-d NBA 경기 전 스냅샷·예측·알림 테스트. 가상 경기로 실제 DB 흐름을 끝까지 돌린다."""
 import random
 from datetime import date, datetime, timedelta, timezone
 
@@ -8,6 +9,7 @@ from pipelines import nba_snapshots
 from pipelines.db import migrate
 from pipelines.ingest import balldontlie as bdl
 from pipelines.modeling import nba_backtest as nb
+from pipelines.modeling.market import nba_market_fair
 from pipelines.modeling.nba_models import MarginRatingModel
 from pipelines.notify import alerts
 from tests.test_balldontlie import page
@@ -22,10 +24,13 @@ def quote(source, bookmaker, selection, price):
     return {"source_id": source, "bookmaker": bookmaker, "market": "H2H", "selection": selection, "price": price}
 
 
+def test_market_fair_uses_pinnacle_then_consensus():
     pinnacle = [quote("the-odds-api", "pinnacle", "HOME", 1.5), quote("the-odds-api", "pinnacle", "AWAY", 2.8)]
+    fair, source = nba_market_fair(pinnacle)
     assert source == "the-odds-api:pinnacle" and fair["HOME"] == pytest.approx((1 / 1.5) / (1 / 1.5 + 1 / 2.8))
     books = [quote("the-odds-api", b, s, p) for b in ("a", "b", "c") for s, p in (("HOME", 1.6), ("AWAY", 2.4))]
-    assert result["status"] == "COMPARED" and result["best_selection"] == "AWAY"
+    assert nba_market_fair(books)[1] == "the-odds-api:consensus(3)"
+    assert nba_market_fair(books[:4]) == (None, None)   # 북메이커 2곳뿐이면 기준으로 삼지 않음
 
 
 @pytest.fixture
@@ -67,19 +72,17 @@ def test_missed_only_is_not_sent_alone(season):
     assert result["status"] == "NOTHING_NEW"
 
 
+def test_snapshots_record_withheld_predictions_alerts_and_weekly_scoring(season):
     s, game_id = season
     first = nba_snapshots.run(now=TIPOFF - timedelta(hours=23, minutes=50), settings=s)
+    assert first["TAKEN"] == 1 and first["PREDICTION_WITHHELD"] == 1
     prediction = query(s, """SELECT model_name, prob_home IS NOT NULL, display_status, withheld_reasons, training_games
                              FROM snapshots.game_prematch_predictions""")
     assert prediction == [("margin_rating_rest", True, "WITHHELD", ["MODEL_NOT_VALIDATED"], 220)]   # 확률은 평가용으로만
+    odds = query(s, "SELECT jsonb_array_length(inputs->'odds') FROM snapshots.game_prematch_inputs WHERE status = 'TAKEN'")
+    assert odds == [(2,)]   # 그 시점에 알려진 Pinnacle 배당이 입력에 얼려 있다(시장 비교의 기준)
     assert nba_snapshots.run(now=TIPOFF - timedelta(hours=23, minutes=40), settings=s)["TAKEN"] == 0   # 멱등
-
-    with psycopg.connect(s.postgres_conninfo) as conn:
-                                        settings=s, now=TIPOFF - timedelta(hours=4))
-                                     TIPOFF + timedelta(minutes=5), settings=s, now=TIPOFF + timedelta(minutes=5))
-    assert (entered, late) == ("INSERTED", "REJECTED:POST_TIPOFF")
-    nba_snapshots.run(now=TIPOFF - timedelta(hours=2, minutes=55), settings=s)
-    assert compared == [("COMPARED", "AWAY", True)]
+    assert nba_snapshots.run(now=TIPOFF - timedelta(hours=2, minutes=55), settings=s)["TAKEN"] == 1
     # PC가 꺼져 1시간 전 시점을 놓치고 경기가 시작되면 MISSED로만 남는다.
     assert nba_snapshots.run(now=TIPOFF + timedelta(minutes=10), settings=s)["MISSED"] == 1
 
@@ -87,11 +90,13 @@ def test_missed_only_is_not_sent_alone(season):
     result = alerts.notify_prematch(now=TIPOFF + timedelta(minutes=15), settings=s,
                                     sender=lambda text, settings: sent.append(text) or {"status": "SENT", "parts": 1})
     assert result["status"] == "SENT" and len(sent) == 1
+    assert "🏀 NBA 경기 전 스냅샷 2건" in sent[0] and "예측 보류(모델 미검증)" in sent[0] and "놓친 시점 1건" in sent[0]
     assert "홈 승 " not in sent[0]   # 검증 전 모델의 확률은 보내지 않는다
     assert query(s, "SELECT count(*) FROM notify.sent_messages WHERE notification_key LIKE 'nba:%%'")[0][0] == 3
     again = alerts.notify_prematch(now=TIPOFF + timedelta(minutes=45), settings=s, sender=lambda *a: pytest.fail("중복"))
     assert again["status"] == "NOTHING_NEW"
 
+    # 5e: 경기가 끝난 결과를 받으면 주간 보고서의 NBA 절에서 모델과 시장을 같은 경기로 채점한다.
     final = {"id": 9999, "date": "2026-01-19", "datetime": "2026-01-20T00:30:00.000Z", "season": 2025, "status": "Final",
              "status_state": "final", "period": 4, "postseason": False, "postponed": False, "home_team_score": 101,
              "visitor_team_score": 108, "home_team": TEAMS[0], "visitor_team": TEAMS[1]}
@@ -104,5 +109,7 @@ def test_missed_only_is_not_sent_alone(season):
     nba = summary["nba"]
     assert nba["snapshots"]["T-1H"] == {"MISSED": 1} and nba["snapshots"]["T-24H"]["TAKEN"] == 1
     week_24 = nba["week"]["T-24H"]
-    assert week_24["games"] == 1 and week_24["vs_market_pre"]["games"] == 1 and week_24["log_loss"] > 0
+    assert week_24["games"] == 1 and week_24["log_loss"] > 0
+    # 원정 승: 시장 확률(원정 34.9%)의 로그 손실 = -ln(0.349)
+    assert week_24["vs_market_pre"]["games"] == 1 and week_24["vs_market_pre"]["market_log_loss"] == pytest.approx(1.0532, abs=1e-3)
     assert "🏀 NBA" in alerts.weekly_text(summary) and "## NBA" in prospective.render_weekly_markdown(summary)

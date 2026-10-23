@@ -8,6 +8,7 @@ import pytest
 
 from pipelines.ingest import openfootball
 from pipelines.ingest import the_odds_api as odds_api
+from pipelines.modeling.market import football_market_fair as market_fair
 from tests.test_pipeline_integration import SAMPLE_PATH, isolated_settings, query  # noqa: F401 (fixture 재사용)
 
 KICKOFF = datetime(2026, 5, 24, 15, 0, tzinfo=timezone.utc)   # 예시 원본 Delta FC - Alpha FC

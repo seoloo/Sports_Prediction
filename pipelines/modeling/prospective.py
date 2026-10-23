@@ -188,7 +188,9 @@ def record_for_snapshot(conn: psycopg.Connection, match_id: int, offset_label: s
 
 
 def market_probabilities(inputs: dict) -> tuple | None:
-    fair, _ = market_fair(inputs.get("odds", []))
+    """스냅샷 입력에 들어 있던(그 시점에 알려진) 해외 시장 확률. 출처 우선순위는 market.football_market_fair."""
+    from .market import football_market_fair
+    fair, _ = football_market_fair(inputs.get("odds", []))
     return None if fair is None else tuple(fair[outcome] for outcome in OUTCOMES)
 
 
@@ -304,6 +306,7 @@ def render_weekly_markdown(summary: dict) -> str:
              "- 활성 모델: " + (f"`{active['model_version']}` (백테스트 run {active['run_id']}, 평가 보고서 "
                                f"{active['report_id']}, 검증 상태 **{active['gate_status']}**)" if active else "없음"), ""]
     if active and active["gate_status"] != "VALIDATED":
+        lines += ["검증 기준을 통과하지 못한 모델입니다. 아래 확률은 평가용 기록이며 표시하지 않습니다(표시 상태 WITHHELD).", ""]
     lines += ["## 스냅샷과 예측", "", "| 시점 | 찍음 | 놓침 | 확률 있음 | 표시 가능(READY) | 보류(WITHHELD) |", "|---|---|---|---|---|---|"]
     for label in ("T-24H", "T-3H", "T-1H"):
         counts = summary["snapshots"].get(label, {})
@@ -332,7 +335,6 @@ def render_weekly_markdown(summary: dict) -> str:
             market = total.get("vs_market_pre")
             versus = f"{market['games']}, {market['model_log_loss']:.4f}, {market['market_log_loss']:.4f}" if market else "—"
             lines.append(f"| {LABEL[label]} | {counts.get('TAKEN', 0)} | {counts.get('MISSED', 0)} | {score(week)} | {score(total)} | {versus} |")
-        value = nba["value"]
     lines += ["", "경기 수가 적은 동안의 숫자는 크게 흔들립니다. 3c 기준처럼 300경기 이상 쌓이기 전에는 결론을 내리지 않습니다."]
     return "\n".join(lines) + "\n"
 

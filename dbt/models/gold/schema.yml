@@ -52,7 +52,7 @@ models:
         data_tests: [not_null]
 
   - name: match_odds_1x2
-    description: 경기 × 북메이커 × 시점별 1X2 배당과 정규화 내재 확률(시장 기준선)
+    description: 경기 × 북메이커 × 시점별 1X2(홈·무·원정) 배당과 정규화 내재 확률(시장 기준선)
     data_tests:
       - dbt_utils_free_unique_combination:
           arguments:

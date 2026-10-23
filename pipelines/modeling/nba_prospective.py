@@ -97,6 +97,7 @@ OFFSET_LABELS = ("T-24H", "T-3H", "T-1H")
 
 def scored_predictions(conn: psycopg.Connection, as_of: datetime) -> list[dict]:
     """확률이 있는 NBA 경기 전 예측과 as_of에 알려진 결과(끝난 경기만), 스냅샷에 들어 있던 해외 시장 확률."""
+    from .market import nba_market_fair
     rows = conn.execute("""
         SELECT p.game_id, p.offset_label, p.model_version, p.prob_home::float, i.tipoff_utc, i.inputs,
                k.home_score, k.away_score
@@ -107,7 +108,7 @@ def scored_predictions(conn: psycopg.Connection, as_of: datetime) -> list[dict]:
         ORDER BY i.tipoff_utc, p.game_id, p.offset_label""", (as_of,)).fetchall()
     scored = []
     for game_id, label, version, prob_home, tipoff, inputs, home_score, away_score in rows:
-        market, _ = market_fair(inputs.get("odds", []))
+        market, _ = nba_market_fair(inputs.get("odds", []))
         scored.append({"game_id": game_id, "offset_label": label, "tipoff_utc": tipoff, "model_version": version,
                        "prob_home": prob_home, "result": "HOME" if home_score > away_score else "AWAY",
                        "market_home": market["HOME"] if market else None})
@@ -129,16 +130,8 @@ def metrics(items: list[dict]) -> dict:
     return result
 
 
-    rows = conn.execute("""
-        SELECT DISTINCT ON (v.game_id) v.game_id, v.best_selection,
-        LEFT JOIN silver.game_revisions_known_at(%s) k USING (game_id)
-    picks = []
-        outcome = None if status != "FINISHED" else ("HOME" if home_score > away_score else "AWAY")
-                      "return": None if outcome is None else (float(price) - 1 if outcome == selection else -1.0)})
-    return picks
-
-
 def weekly(conn: psycopg.Connection, start: datetime, end: datetime, as_of: datetime) -> dict:
+    """주간 보고서의 NBA 절: 그 주 스냅샷·예측 상태, 이번 주·누적 채점(시장 비교 포함)."""
     from collections import Counter, defaultdict
     by_offset, reasons = defaultdict(Counter), Counter()
     for label, status, display, withheld, has_probability in conn.execute("""
@@ -158,4 +151,4 @@ def weekly(conn: psycopg.Connection, start: datetime, end: datetime, as_of: date
             "snapshots": {label: dict(counts) for label, counts in sorted(by_offset.items())},
             "withheld_reasons": dict(reasons),
             "week": {label: metrics([i for i in this_week if i["offset_label"] == label]) for label in OFFSET_LABELS},
-            "cumulative": {label: metrics([i for i in scored if i["offset_label"] == label]) for label in OFFSET_LABELS},
+            "cumulative": {label: metrics([i for i in scored if i["offset_label"] == label]) for label in OFFSET_LABELS}}

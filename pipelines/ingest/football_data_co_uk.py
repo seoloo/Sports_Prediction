@@ -10,7 +10,9 @@
 5. Silver: 배당을 한 줄 형태로 COPY한 뒤 한 번의 SQL로 "값이 바뀐 것만" 다음 버전으로 추가한다.
    끝난 경기의 기록(슈팅·유효 슈팅·퇴장, 3g)도 같은 방식으로 silver.match_stats_revisions에 넣는다.
 
-다가올 경기의 배당(3h): football-data.co.uk의 fixtures.csv(예정 경기와 배당, 여러 리그가 한 파일)도 같은 방식으로
+다가올 경기의 배당: football-data.co.uk의 fixtures.csv(예정 경기와 배당, 여러 리그가 한 파일)도 같은 방식으로
+직접 내려받아 landing 폴더에 넣으면 읽는다. EPL(E0) 행만 쓰고 시즌은 경기 날짜로 정한다. 경기 전 예측을
+채점할 때 비교하는 "시장 기준 확률"이 된다(pipelines/modeling/market.py).
 
 실행
   python -m pipelines.ingest.football_data_co_uk                       # 기본 landing 폴더의 모든 파일
@@ -45,11 +47,11 @@ LANDING_DIR = PROJECT_ROOT / "data" / "landing" / "football-data-co-uk"
 # 리그 코드(football-data) → openfootball 리그 코드
 DIVISION_TO_COMPETITION = {"E0": "en.1"}
 FILENAME_PATTERN = re.compile(r"^(?P<division>E0)_(?P<start>\d{4})[-_](?P<end>\d{2})\.csv$")
-# 예정 경기 파일(3h). 내려받을 때 이름이 fixtures.csv라, 날짜를 붙여 저장해도 되게 fixtures_20261023.csv 등도 받는다.
+# 예정 경기 파일. 내려받을 때 이름이 fixtures.csv라, 날짜를 붙여 저장해도 되게 fixtures_20261023.csv 등도 받는다.
 FIXTURES_PATTERN = re.compile(r"^fixtures(?:[-_][\w-]+)?\.csv$", re.IGNORECASE)
 FIXTURES_DIVISION = "E0"
 
-# 1X2 배당을 찾을 북메이커 코드(football-data Notes 기준). 열 이름은 코드+H/D/A, 마감은 코드+C+H/D/A.
+# 1X2(홈·무·원정) 배당을 찾을 북메이커 코드(football-data Notes 기준). 열 이름은 코드+H/D/A, 마감은 코드+C+H/D/A.
 BOOKMAKERS_1X2 = ("B365", "BW", "IW", "PS", "WH", "VC", "BF", "1XB", "BFE", "BFD", "BMGM", "BV", "CL", "LB",
                   "PP", "SKB", "Max", "Avg")
 # 언더오버 2.5·아시안 핸디캡 배당을 주는 코드. 여기서는 Pinnacle이 PS가 아니라 P로 표기된다.

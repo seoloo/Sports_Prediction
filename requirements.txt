@@ -1,6 +1,6 @@
-streamlit==1.65.0
 tzdata==2026.5
 psycopg[binary]==3.3.6
 boto3==1.43.115
 confluent-kafka==2.15.1
 numpy==2.5.4
+pyarrow==25.0.1

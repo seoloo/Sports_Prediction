@@ -1,6 +1,6 @@
 """dbt 실행 도우미.
 
-dbt는 Streamlit과 protobuf 버전이 충돌해 별도 가상환경(.venv-dbt, 컨테이너에서는 /opt/dbt-venv)에 둔다.
+dbt는 다른 패키지(Airflow 등)와 의존성이 충돌하지 않게 별도 가상환경(.venv-dbt, 컨테이너에서는 /opt/dbt-venv)에 둔다.
 이 모듈은 .env의 Postgres 접속 정보를 dbt 환경 변수(DBT_POSTGRES_*)로 넘겨 dbt를 실행한다.
 실행: python -m pipelines.dbt_runner build   (그 밖의 dbt 인자도 그대로 넘길 수 있다)
 """

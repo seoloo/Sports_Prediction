@@ -1,8 +1,9 @@
+-- 2단계: football-data.org 실시간성 경기 정보, 스트림 거부 기록.
 
 INSERT INTO ingest.sources VALUES
   ('football-data-org', 'football-data.org API v4', 'free tier terms',
    'https://www.football-data.org/client/register', DATE '2026-10-20', TRUE,
-   '무료 12개 대회, 분당 10회. 출처 표기 "Football data provided by the Football-Data.org API". 키는 .env에만. 해지 시 데이터 삭제.'),
+   '무료 12개 대회, 분당 10회. 출처 표기 "Football data provided by the Football-Data.org API". 키는 .env에만. 해지 시 데이터 삭제.');
 
 -- football-data.org가 알려 준 경기 상태·점수의 버전. published_at = API의 lastUpdated(출처의 갱신 시각).
 -- 같은 내용(content_hash)은 건너뛰고, 더 오래된 lastUpdated를 가진 늦은 이벤트는 저장하지 않는다(stream_rejections에 기록).

@@ -122,12 +122,6 @@ def attach_prediction(conn: psycopg.Connection, match_id: int, label: str, match
                                season=match["season"], kickoff=kickoff, competition=match.get("competition_code"))
 
 
-    try:
-        with conn.transaction():
-    except Exception:   # noqa: BLE001 (비교 실패가 입력 스냅샷까지 잃게 하지 않는다)
-        return "FAILED"
-
-
 def run(*, now: datetime | None = None, settings=None) -> dict:
     """해야 할 스냅샷을 찍거나 MISSED로 기록하고 건수를 돌려준다. 같은 시각에 다시 불러도 새로 기록하지 않는다(멱등)."""
     now = now or datetime.now(timezone.utc)
@@ -156,7 +150,6 @@ def run(*, now: datetime | None = None, settings=None) -> dict:
                         counts["TAKEN"] += 1
                         outcome = attach_prediction(conn, match_id, label, inputs["match"], now, predictors)
                         counts["PREDICTION_" + outcome] = counts.get("PREDICTION_" + outcome, 0) + 1
-                        counts["VALUE_" + value] = counts.get("VALUE_" + value, 0) + 1
                     else:
                         conn.execute("""INSERT INTO snapshots.prematch_inputs
                                         (match_id, offset_label, kickoff_utc, due_at, status, recorded_at)

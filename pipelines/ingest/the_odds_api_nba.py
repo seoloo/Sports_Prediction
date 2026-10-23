@@ -11,7 +11,9 @@
    같은 홈·원정이면서 시작 시각이 3시간 안인 silver.games 경기에 붙인다(두 소스의 시작 시각이 몇 분 다를 수 있다).
 남은 크레딧이 RESERVE_CREDITS 아래면 NBA는 받지 않는다(축구 우선).
 
-실행: python -m pipelines.ingest.the_odds_api_nba [--force] [--suggest-aliases]
+핸디캡·언더오버(SPREAD·TOTAL)는 자동으로 받지 않고 --lines로 필요할 때만 받는다(2크레딧).
+
+실행: python -m pipelines.ingest.the_odds_api_nba [--force] [--lines] [--suggest-aliases]
 """
 import argparse
 import hashlib
@@ -222,7 +224,7 @@ LINES_REFETCH_AFTER = timedelta(minutes=60)
 
 
 def fetch_lines(*, now: datetime | None = None, settings=None, force: bool = False, opener=urllib.request.urlopen) -> dict:
-    """핸디캡·언더오버 배당을 요청할 때만 받는다(6c, 2크레딧: 시장 2개 × 지역 1개). 자동 수집에는 넣지 않는다.
+    """핸디캡·언더오버 배당을 요청할 때만 받는다(2크레딧: 시장 2개 × 지역 1개). 자동 수집에는 넣지 않는다.
 
     1시간 안에 받은 적이 있으면 다시 받지 않는다(force 제외). 크레딧이 RESERVE_CREDITS 아래면 받지 않는다(축구 자동 수집 우선).
     """
@@ -273,6 +275,7 @@ def suggest_aliases(conn: psycopg.Connection, events: list[dict]) -> list[dict]:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="The Odds API NBA 배당 수집")
     parser.add_argument("--force", action="store_true", help="시점과 관계없이 지금 받기(1크레딧)")
+    parser.add_argument("--lines", action="store_true", help="핸디캡·언더오버 배당을 지금 받기(2크레딧, 1시간 안에 받았으면 건너뜀)")
     parser.add_argument("--suggest-aliases", action="store_true", help="팀 이름 대조표 후보 출력(무료 /events만 사용)")
     args = parser.parse_args(argv)
     settings = load_settings()
@@ -280,6 +283,9 @@ def main(argv=None) -> int:
         with connect(settings) as conn:
             events, _ = call(f"/sports/{SPORT_KEY}/events", settings.the_odds_api_key)
             print(json.dumps(suggest_aliases(conn, events), ensure_ascii=False, indent=2))
+        return 0
+    if args.lines:
+        print(json.dumps(fetch_lines(settings=settings, force=args.force), ensure_ascii=False, indent=2, default=str))
         return 0
     print(json.dumps(run_due(settings=settings, force=args.force), ensure_ascii=False, indent=2, default=str))
     return 0

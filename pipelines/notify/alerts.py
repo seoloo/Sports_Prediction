@@ -62,8 +62,7 @@ def pending_prematch(conn: psycopg.Connection, now: datetime) -> list[dict]:
     """최근 이틀 안에 기록됐고 경기가 아직 지난 일이 아닌 스냅샷 중, 아직 알리지 않은 것(예측이 여러 버전이면 각각)."""
     rows = conn.execute("""
         SELECT i.match_id, i.offset_label, i.status, i.kickoff_utc, h.canonical_name, a.canonical_name,
-               p.display_status, p.withheld_reasons, p.prob_home, p.prob_draw, p.prob_away,
-               v.market_home, v.market_draw, v.market_away
+               p.display_status, p.withheld_reasons, p.prob_home, p.prob_draw, p.prob_away
         FROM snapshots.prematch_inputs i
         JOIN silver.matches m USING (match_id)
         JOIN silver.teams h ON h.team_id = m.home_team_id
@@ -74,16 +73,8 @@ def pending_prematch(conn: psycopg.Connection, now: datetime) -> list[dict]:
                           AND s.notification_key = i.match_id || ':' || i.offset_label)
         ORDER BY i.kickoff_utc, i.match_id, i.due_at""", (now - PREMATCH_LOOKBACK, now - PREMATCH_STALE_AFTER)).fetchall()
     keys = ("match_id", "offset_label", "status", "kickoff_utc", "home", "away", "display_status", "withheld_reasons",
+            "prob_home", "prob_draw", "prob_away")
     return [dict(zip(keys, row)) for row in rows]
-
-
-def value_line(row: dict) -> str | None:
-    if not row.get("value_status"):
-        return None
-    if row["value_status"] == "COMPARED":
-    if row.get("market_home") is not None:
-        result["market"] = {"HOME": float(row["market_home"]), "DRAW": float(row["market_draw"]),
-                            "AWAY": float(row["market_away"])}
 
 
 def prematch_text(rows: list[dict]) -> str:
@@ -103,8 +94,6 @@ def prematch_text(rows: list[dict]) -> str:
             lines.append(f"· {label}: 찍음 · 예측 보류({reason_text(row['withheld_reasons'])})")
         else:
             lines.append(f"· {label}: 찍음 · 예측 기록 없음")
-        if row["status"] == "TAKEN" and (value := value_line(row)):
-            lines.append(f"  {value}")
     return "\n".join(lines)
 
 
@@ -112,7 +101,7 @@ def pending_nba_prematch(conn: psycopg.Connection, now: datetime) -> list[dict]:
     """NBA 스냅샷 중 아직 알리지 않은 것(5d-d). 알림 키는 nba:경기:시점으로 축구와 겹치지 않는다."""
     rows = conn.execute("""
         SELECT i.game_id, i.offset_label, i.status, i.tipoff_utc, h.canonical_name, a.canonical_name,
-               p.display_status, p.withheld_reasons, p.prob_home,
+               p.display_status, p.withheld_reasons, p.prob_home
         FROM snapshots.game_prematch_inputs i
         JOIN silver.games g USING (game_id)
         JOIN silver.teams h ON h.team_id = g.home_team_id JOIN silver.teams a ON a.team_id = g.away_team_id
@@ -122,7 +111,7 @@ def pending_nba_prematch(conn: psycopg.Connection, now: datetime) -> list[dict]:
                           AND s.notification_key = 'nba:' || i.game_id || ':' || i.offset_label)
         ORDER BY i.tipoff_utc, i.game_id, i.due_at""", (now - PREMATCH_LOOKBACK, now - PREMATCH_STALE_AFTER)).fetchall()
     keys = ("game_id", "offset_label", "status", "tipoff_utc", "home", "away", "display_status", "withheld_reasons",
-            "market_home", "market_away")
+            "prob_home")
     return [dict(zip(keys, row)) for row in rows]
 
 
@@ -142,10 +131,6 @@ def nba_text(rows: list[dict]) -> str:
             lines.append(f"· {label}: 찍음 · 예측 보류({reason_text(row['withheld_reasons'])})")
         else:
             lines.append(f"· {label}: 찍음 · 예측 기록 없음")
-        if row["value_status"]:
-            if row["value_status"] == "COMPARED":
-            if row["market_home"] is not None:
-                result["market"] = {"HOME": float(row["market_home"]), "AWAY": float(row["market_away"])}
     missed = len(rows) - len(taken)
     if missed:
         lines += ["", f"놓친 시점 {missed}건(그 시각에 기록하지 못함)"]
@@ -188,7 +173,6 @@ def weekly_text(summary: dict) -> str:
     if summary["withheld_reasons"]:
         lines.append("보류 사유: " + ", ".join(f"{reason_text([reason])} {count}"
                                             for reason, count in sorted(summary["withheld_reasons"].items())))
-    value = summary.get("value")
     nba = summary.get("nba")
     if nba and nba.get("snapshots"):   # 5e: NBA 경기 전 예측 채점
         lines += ["", "🏀 NBA"]
@@ -198,7 +182,6 @@ def weekly_text(summary: dict) -> str:
             market = week.get("vs_market_pre")
             versus = f"(시장 {market['market_log_loss']:.3f})" if market else ""
             lines.append(f"{OFFSET_LABEL[label]}: 찍음 {counts.get('TAKEN', 0)} · 놓침 {counts.get('MISSED', 0)}{score}{versus}")
-            v = nba["value"]
     return "\n".join(lines)
 
 

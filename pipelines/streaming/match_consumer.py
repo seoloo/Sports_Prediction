@@ -1,3 +1,4 @@
+"""Kafka 소비자 → Silver(로드맵 2c). 경기 이벤트를 silver.live_match_revisions에 버전으로 쌓는다.
 
 이벤트 하나를 처리하는 규칙(handle_match_event)
 1. 형식이 틀리거나 팀이 대조표에 없으면 저장하지 않고 silver.stream_rejections에 이유를 남긴다.
@@ -25,6 +26,7 @@ from . import events, kafka_io
 
 GROUP_ID = "silver-match-writer"
 # 이 소비자가 읽는 토픽. 토픽마다 처리 함수가 다르다(dispatch_handler).
+TOPICS = ["fdorg.matches.v1"]
 CONTENT_FIELDS = ("status", "utc_kickoff", "matchday", "ht_home", "ht_away", "ft_home", "ft_away", "duration")
 
 
@@ -94,7 +96,7 @@ def handle_match_event(conn: psycopg.Connection, raw: bytes, *, topic: str, part
 
 
 def dispatch_handler(topic: str, settings=None):
-        from functools import partial
+    """토픽 이름 → 처리 함수. 지금은 경기 이벤트(handle_match_event) 하나이고, 토픽이 늘면 여기서 나눈다."""
     return handle_match_event
 
 
@@ -148,7 +150,9 @@ def run(*, topics=None, group_id: str = GROUP_ID, settings=None, until_idle: boo
 
 
 def main(argv=None):
+    parser = argparse.ArgumentParser(description="경기 이벤트를 Silver에 반영합니다.")
     parser.add_argument("--until-idle", action="store_true", help="새 메시지가 없으면 종료")
+    parser.add_argument("--topic", action="append", help="읽을 토픽(여러 번 지정 가능). 기본: fdorg.matches.v1")
     parser.add_argument("--group", default=GROUP_ID)
     args = parser.parse_args(argv)
     print(json.dumps(run(topics=args.topic, group_id=args.group, until_idle=args.until_idle), ensure_ascii=False))

@@ -19,7 +19,7 @@ sources:
       - name: game_revisions
         description: NBA 일정·상태·점수의 버전. 끝난 경기는 동점일 수 없다(DB CHECK)
       - name: game_odds_revisions
-        description: NBA 배당의 버전(승패·핸디캡·언더오버, 기준선 line 포함, 5d-b·6c)
+        description: NBA 배당의 버전(승패·핸디캡·언더오버, 기준선 line 포함, 5d-b)
 
   # 6a: 데이터 신선도(SLA). "데이터가 바뀌었나"가 아니라 "수집이 돌았나"를 본다.
   # 경기 버전은 내용이 바뀔 때만 생기므로(예: 쉬는 기간) 신선도 기준이 될 수 없다.

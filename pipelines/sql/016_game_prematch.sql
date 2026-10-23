@@ -1,5 +1,6 @@
+-- 5d-d: NBA 경기 전 스냅샷·예측(PROSPECTIVE). 축구(004·007)와 같은 규칙을 2지선다로.
 -- - 시작 24·3·1시간 전에 그때 알려진 입력을 얼린다. 놓친 시점은 MISSED로 남기고 나중에 채우지 않는다.
--- - 예측·비교는 스냅샷과 같은 기준 시각(as_of)에만 기록할 수 있다(외래 키). 소급 기록을 막는다.
+-- - 예측은 스냅샷과 같은 기준 시각(as_of)에만 기록할 수 있다(외래 키). 소급 기록을 막는다.
 -- - 검증 기준을 통과하지 못한 모델의 확률은 평가용으로만 저장하고 표시 상태는 WITHHELD다.
 
 CREATE TABLE snapshots.game_prematch_inputs (
@@ -44,21 +45,7 @@ CREATE TABLE snapshots.game_prematch_predictions (
   CHECK (display_status = 'WITHHELD' OR (gate_status = 'VALIDATED' AND prob_home IS NOT NULL))
 );
 
-  game_id BIGINT NOT NULL,
-  offset_label TEXT NOT NULL,
-  as_of TIMESTAMPTZ NOT NULL,
-  market_home NUMERIC(9, 8),
-  market_away NUMERIC(9, 8),
-  best_selection TEXT CHECK (best_selection IN ('HOME', 'AWAY')),
-  rule TEXT NOT NULL,
-  recorded_at TIMESTAMPTZ NOT NULL,
-  PRIMARY KEY (game_id, offset_label),
-  FOREIGN KEY (game_id, offset_label, as_of) REFERENCES snapshots.game_prematch_inputs (game_id, offset_label, as_of),
-  CHECK (market_home IS NULL OR abs(market_home + market_away - 1) < 0.000001)
-);
-
 CREATE TRIGGER game_prematch_inputs_immutable BEFORE UPDATE OR DELETE ON snapshots.game_prematch_inputs
   FOR EACH ROW EXECUTE FUNCTION ingest.reject_change();
 CREATE TRIGGER game_prematch_predictions_immutable BEFORE UPDATE OR DELETE ON snapshots.game_prematch_predictions
-  FOR EACH ROW EXECUTE FUNCTION ingest.reject_change();
   FOR EACH ROW EXECUTE FUNCTION ingest.reject_change();
