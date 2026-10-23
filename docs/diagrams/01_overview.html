@@ -68,7 +68,7 @@
         <div class="tech-row"><div class="name">SeaweedFS (S3)<span>Bronze · 원본</span></div><div class="why">받은 원본을 <b>내용 해시 경로</b>로 바이트 그대로 보존 → 언제든 다시 처리. 표준 S3 API(boto3)</div></div>
         <div class="tech-row"><div class="name">PostgreSQL<span>Silver · 버전</span></div><div class="why">버전 테이블 + 트리거로 <b>수정·삭제를 DB가 차단</b>, <span class="code">*_known_at(as_of)</span> 함수로 그때의 데이터를 조회</div></div>
         <div class="tech-row"><div class="name">Kafka<span>스트리밍</span></div><div class="why">경기 갱신·직접 입력은 원래 <b>시간순 이벤트</b>. 중복·늦은 도착을 거르고 과거 시즌을 재생해 검증</div></div>
-        <div class="tech-row"><div class="name">dbt<span>Gold · 품질 테스트</span></div><div class="why">순위표·시점 특징·배당 확률을 코드로 정의, <b>품질 테스트 26개</b>, 과거 기준 시각으로 재계산</div></div>
+        <div class="tech-row"><div class="name">dbt<span>Gold · 품질 테스트</span></div><div class="why">순위표·시점 특징·배당 확률을 코드로 정의, <b>품질 테스트 38개</b>, 과거 기준 시각으로 재계산</div></div>
         <div class="tech-row"><div class="name">Spark · Parquet<span>레이크 · 대조</span></div><div class="why">Gold를 Parquet 레이크로 내보내고 Spark로 <b>독립 재계산해 dbt와 행 단위 대조</b>(불일치 0)</div></div>
         <div class="tech-row"><div class="name">Airflow<span>오케스트레이션</span></div><div class="why">매일 수집·변환, <b>30분마다 경기 전 스냅샷</b>, 주간 채점, 실패 알림. API 크레딧 예산 안에서</div></div>
         <div class="tech-row"><div class="name">numpy<span>모델 · 평가</span></div><div class="why">Poisson·Dixon-Coles·점수 차 등급·Elo, <b>시간순 백테스트 + 블록 부트스트랩</b> 검증 기준</div></div>

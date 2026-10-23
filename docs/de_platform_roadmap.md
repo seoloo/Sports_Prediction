@@ -67,6 +67,8 @@ Airflow가 전체 작업 순서와 재시도를 관리합니다.
 | 5d-a. NBA 경기 수집 ✅ | balldontlie 이용약관 검토, 축구와 분리한 `silver.games`·`game_revisions`(소스 경기 ID가 정체성, 무승부 없음), 쪽 단위 Bronze, 분당 5회 제한, 매일 DAG | 아홉 시즌 11,429경기, 과거 일곱 시즌 우승팀 공개 기록과 일치, 소스 점수 오류 2건 걸러냄, 축구 테이블 영향 0 | balldontlie 무료 키(완료) |
 | 5d-b. NBA 배당 ✅ | The Odds API `basketball_nba`(승패 2지선다), 동부 날짜별 첫 경기 1시간 전 하루 1번(월 약 30크레딧), `silver.game_odds_revisions`, 팀 대조표 30개 | 41경기 연결·실패 0, 배당 712행 | 없음 |
 | 5d-c. NBA 모델 ✅ | 단순 비율·점수 차 등급(+연전)·Elo, 시간순 백테스트·평가. 팀 전력 모델이 단순 비율보다 −0.078, ECE 기준 통과, 시장 비교 자료 없어 NOT_VALIDATED | [NBA 평가 보고서](reports/evaluation_nba.md) | 없음 |
+| 6a. NBA Gold·신선도 ✅ | dbt NBA 모델 4개·테스트 12개, 수집 기록 기준 신선도 검사(SLA)를 매일 DAG에, Windows 예약 포트 회피(S3 45900·Kafka 45992) | dbt PASS 50, 신선도 실패·회복 테스트 | 없음 |
+| 6b. NBA Spark 대조 | NBA Gold를 Parquet로 내보내 Spark로 다시 계산·대조 | 불일치 0 | 없음 |
 
 
 ## 3단계 세부 계획

@@ -20,7 +20,7 @@
 
 ```text
 football-data.org 수집기 ─┐                     ┌─ 소비자 → Silver(Postgres)
-과거 시즌 재생기 ─────────┘   (127.0.0.1:59092)  └─ (재생은 별도 sports_replay DB)
+과거 시즌 재생기 ─────────┘   (127.0.0.1:45992)  └─ (재생은 별도 sports_replay DB)
 ```
 
 | 토픽 | 파티션 | 용도 |
@@ -33,7 +33,7 @@ football-data.org 수집기 ─┐                     ┌─ 소비자 → Silv
 | 결정 | 위치 | 이유 |
 |---|---|---|
 | ZooKeeper 없는 KRaft 단일 노드 | `infra/docker-compose.yml`의 `kafka` 서비스 | 개인 PC에서 컨테이너 하나로 충분하고, 최신 Kafka의 기본 방식이라서. 메모리는 512MB로 제한 |
-| 접속 주소 3가지(컨테이너끼리 `kafka:9092`, 이 PC에서 `127.0.0.1:59092`, 내부 합의용 9093) | 같은 곳 `KAFKA_LISTENERS`, `KAFKA_ADVERTISED_LISTENERS` | 컨테이너 안(수집기·소비자·Airflow)과 밖(이 PC의 테스트·명령)에서 접속 주소가 다르기 때문. 외부 접속을 막으려고 127.0.0.1에만 엶 |
+| 접속 주소 3가지(컨테이너끼리 `kafka:9092`, 이 PC에서 `127.0.0.1:45992`, 내부 합의용 9093) | 같은 곳 `KAFKA_LISTENERS`, `KAFKA_ADVERTISED_LISTENERS` | 컨테이너 안(수집기·소비자·Airflow)과 밖(이 PC의 테스트·명령)에서 접속 주소가 다르기 때문. 외부 접속을 막으려고 127.0.0.1에만 엶 |
 | 토픽 자동 생성 끔 | 같은 곳 `KAFKA_AUTO_CREATE_TOPICS_ENABLE` | 오타 난 토픽 이름이 조용히 새로 생기는 사고를 막고, 파티션 수를 코드로 정하기 위해 |
 | 토픽 이름에 `.v1` | `pipelines/streaming/kafka_io.py`의 `TOPICS` | 이벤트 형식이 크게 바뀌면 새 토픽(v2)으로 옮겨, 옛 소비자와 새 소비자가 섞이지 않게 |
 | 메시지 키 = 경기 ID | 수집기의 `publish` 호출 | Kafka는 같은 키를 같은 파티션에 넣고 파티션 안에서는 순서를 지킨다. 같은 경기의 이벤트 순서가 보장된다 |
@@ -64,7 +64,7 @@ football-data.org 수집기 ─┐                     ┌─ 소비자 → Silv
 
 | 확인 | 결과 |
 |---|---|
-| Kafka 상태 | healthy, 127.0.0.1:59092에서만 접속 |
+| Kafka 상태 | healthy, 127.0.0.1:45992에서만 접속 |
 | `fdorg.matches.v1` | 메시지 380건, 소비자가 안 읽은 메시지(LAG) 0 |
 | `replay.matches.v1` | 837건(재생 검증 때 보낸 것) |
 | 같은 내용 두 번 보내기 | Kafka에는 2건(offset 0, 1)으로 저장, 받은 시각은 5분 차이, `event_id`는 같음 → 소비자가 중복으로 알아봄 |

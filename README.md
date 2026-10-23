@@ -37,7 +37,7 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | 수집 | Python 표준 라이브러리 urllib, confluent-kafka | 소스별 요청 한도·크레딧 예산을 지키며 수집, 원본은 바이트 그대로 보존 |
 | Bronze | SeaweedFS(S3 API) + boto3 | 내용 해시 경로(`sha256=….json`)로 한 번만 저장 |
 | Silver | PostgreSQL 16 + psycopg 3 | `*_revisions` 버전 테이블, 수정·삭제를 트리거로 차단, `published_at`·`received_at` 두 시각으로 시점 조회(`*_known_at(as_of)`) |
-| Gold | dbt-core + dbt-postgres | 순위표, 시점 특징, 마진 제거 배당 확률, 품질 테스트 26개 |
+| Gold | dbt-core + dbt-postgres | 순위표, 시점 특징, 마진 제거 배당 확률, 품질 테스트 38개 |
 | 레이크 | Parquet(pyarrow) + Apache Spark 4 | Gold를 S3 `lake` 버킷으로 내보내고 Spark로 특징을 다시 계산해 dbt와 행 단위 대조 |
 | 오케스트레이션 | Apache Airflow 3 | 매일 수집·dbt·Spark 대조, 30분마다 경기 전 스냅샷, 주간 채점 |
 | 모델 | numpy(직접 구현) | 축구 단순 비율·Poisson(ridge, 시간 감쇠)·Dixon-Coles, NBA 점수 차 등급·Elo, 주 단위 walk-forward 백테스트, 블록 부트스트랩 평가 |
@@ -66,6 +66,7 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | 5d-b | NBA 승패 배당(The Odds API, 그날 첫 경기 1시간 전 하루 1번, 월 약 30크레딧) | [5d-b](docs/walkthrough/5d_b_nba_odds.md) |
 | 5d-c | NBA 모델(점수 차 등급·Elo·연전 효과) 백테스트·평가 | [5d-c](docs/walkthrough/5d_c_nba_models.md) |
 | 5e | 주간 채점 보고서·텔레그램 요약에 NBA(경기 전 확률 vs 같은 시점 시장 확률) | [5e](docs/walkthrough/5e_weekly_nba.md) |
+| 6a | NBA dbt Gold(순위표·배당 확률) + 수집기별 데이터 신선도 검사(SLA) | [6a](docs/walkthrough/6a_nba_gold_freshness.md) |
 
 평가 결과(시험 시즌 2023-24 이후, 로그 손실이 낮을수록 좋음):
 
@@ -112,8 +113,8 @@ docker compose --env-file .env -f infra/docker-compose.yml up -d          # Post
 | 서비스 | 주소 |
 |---|---|
 | PostgreSQL | 127.0.0.1:55432 |
-| SeaweedFS(S3 API) | 127.0.0.1:59000 |
-| Kafka | 127.0.0.1:59092 |
+| SeaweedFS(S3 API) | 127.0.0.1:45900 |
+| Kafka | 127.0.0.1:45992 |
 | Airflow 화면 | http://127.0.0.1:58080 |
 
 중지: `docker compose --env-file .env -f infra/docker-compose.yml down`(데이터 볼륨은 유지).
@@ -149,6 +150,7 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 | Spark 재계산·대조 | `docker compose --env-file .env -f infra/docker-compose.yml --profile spark run --rm spark-features` |
 | 과거 배당 CSV 반영(직접 받은 파일, `data/landing/football-data-co-uk/`) | `.\.venv\Scripts\python.exe -m pipelines.ingest.football_data_co_uk` |
 | dbt(별도 가상환경 `.venv-dbt`) | `.\.venv\Scripts\python.exe -m pipelines.dbt_runner build` |
+| 데이터 신선도 검사(수집이 멈췄는지) | `.\.venv\Scripts\python.exe -m pipelines.dbt_runner source freshness` |
 | 과거 시점으로 Gold 다시 계산 | `.\.venv\Scripts\python.exe -m pipelines.dbt_runner build --vars "{as_of: '2025-01-01T00:00:00Z'}"` |
 
 ### 5. 테스트
