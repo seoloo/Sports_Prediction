@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "match_snapshot.v1.json",
+  "title": "경기 상태 스냅샷 v1(event_type = match_snapshot)",
+  "description": "football-data.org 수집기와 과거 시즌 재생기가 보내는 경기 한 건의 현재 상태. 선택 필드를 더하는 것은 v1 안에서 허용(소비자는 모르는 필드를 무시), 필수 필드·타입·허용값을 바꾸면 v2로.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["external_match_id", "competition", "season", "status", "utc_kickoff", "home_team_id", "away_team_id",
+               "ft_home", "ft_away", "ht_home", "ht_away"],
+  "properties": {
+    "external_match_id": {"type": "string", "minLength": 1},
+    "competition": {"type": "string", "pattern": "^[a-z]{2}\\.[0-9]$", "description": "openfootball 리그 코드(en.1 등)"},
+    "season": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$"},
+    "status": {"enum": ["SCHEDULED", "TIMED", "IN_PLAY", "PAUSED", "EXTRA_TIME", "PENALTY_SHOOTOUT", "FINISHED",
+                        "SUSPENDED", "POSTPONED", "CANCELLED", "AWARDED"]},
+    "utc_kickoff": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "matchday": {"type": ["integer", "null"], "minimum": 1},
+    "home_team_id": {"type": "string", "minLength": 1},
+    "away_team_id": {"type": "string", "minLength": 1},
+    "home_team_name": {"type": ["string", "null"]},
+    "away_team_name": {"type": ["string", "null"]},
+    "ft_home": {"type": ["integer", "null"], "minimum": 0},
+    "ft_away": {"type": ["integer", "null"], "minimum": 0},
+    "ht_home": {"type": ["integer", "null"], "minimum": 0},
+    "ht_away": {"type": ["integer", "null"], "minimum": 0},
+    "duration": {"enum": ["REGULAR", "EXTRA_TIME", "PENALTY_SHOOTOUT", null]},
+    "last_updated": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "raw_file_id": {"type": ["integer", "null"], "description": "Bronze 원본(ingest.raw_files). 재생기는 null"}
+  },
+  "allOf": [
+    {
+      "description": "끝난 경기는 최종 점수가 있어야 한다",
+      "if": {"properties": {"status": {"const": "FINISHED"}}},
+      "then": {"properties": {"ft_home": {"type": "integer"}, "ft_away": {"type": "integer"}}}
+    }
+  ]
+}

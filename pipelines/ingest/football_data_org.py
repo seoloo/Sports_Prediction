@@ -7,6 +7,8 @@
 1. 대회·시즌의 전체 경기 목록을 한 번에 조회한다(요청 1회).
 2. Bronze: 응답 원본을 내용 해시 경로로 S3에 보존하고 ingest.raw_files·fetches에 기록한다.
 3. 응답 내용이 지난번과 같으면 이벤트를 보내지 않는다. 바뀌었으면 경기마다 이벤트를 Kafka로 보낸다.
+   보내기 전에 이벤트 계약(pipelines/streaming/contracts.py, 6c)을 검사해, 어긴 경기는 보내지 않고
+   silver.quality_issues(CONTRACT_VIOLATION)에 남긴다. 실제로 이 API가 상태 칸에 날짜를 넣어 보낸 경기가 있었다.
    Silver 반영은 소비자(pipelines/streaming/match_consumer.py)가 한다. 수집과 반영을 나눠, 한쪽이 멈춰도 다른 쪽에 영향이 없다.
 
 실행
@@ -30,6 +32,7 @@ from ..config import load_settings
 from ..db import connect, migrate
 from ..object_store import client, ensure_bucket, put_if_absent
 from ..streaming import events, kafka_io
+from ..streaming.contracts import ContractViolation, check
 from .rate_limit import RateLimiter  # noqa: F401 (테스트·다른 수집기가 이 이름으로도 쓴다)
 
 SOURCE_ID = "football-data-org"
@@ -156,20 +159,31 @@ def poll_once(competition: str = "PL", season: str | None = None, *, settings=No
                 conn.execute("INSERT INTO ingest.fetches (run_id, raw_file_id, received_at, is_new_content) VALUES (%s, %s, %s, %s)",
                              (run_id, raw_file_id, received_at, is_new))
             matches = [normalize_match(raw) for raw in json.loads(payload)["matches"]]
-            published = 0
+            published = violations = 0
             if is_new:
                 # 응답 전체가 지난번과 같으면 보낼 것이 없다. 바뀌었으면 모든 경기를 보내고, 소비자가 바뀐 경기만 새 버전으로 만든다.
                 kafka_producer = kafka_producer or kafka_io.producer(settings, client_id="fdorg-poller")
-                for match in matches:
+                for index, match in enumerate(matches):
                     event = events.build_event(
                         source_id=SOURCE_ID, event_type="match_snapshot", key=match["external_match_id"],
                         payload={**match, "competition": COMPETITION_TO_LEAGUE[competition], "season": season,
                                  "raw_file_id": raw_file_id},
                         published_at=_parse_utc(match["last_updated"]), observed_at=received_at)
+                    try:
+                        check(event)   # 생산자 쪽 계약 검사: 깨진 이벤트를 토픽에 넣지 않는다
+                    except ContractViolation as exc:
+                        conn.execute("""INSERT INTO silver.quality_issues (run_id, raw_file_id, record_index, issue_code,
+                                        detail, created_at) VALUES (%s, %s, %s, 'CONTRACT_VIOLATION', %s, %s)""",
+                                     (run_id, raw_file_id, index, Jsonb({"reason": exc.reason, **exc.detail,
+                                                                          "external_match_id": match["external_match_id"]}),
+                                      received_at))
+                        violations += 1
+                        continue
                     kafka_io.publish(kafka_producer, topic, match["external_match_id"], events.encode(event))
                     published += 1
                 kafka_io.flush(kafka_producer)
             stats = {"dataset": dataset, "new_content": is_new, "matches": len(matches), "events_published": published,
+                     "contract_violations": violations,
                      "requests_left_this_minute": {k.lower(): v for k, v in headers.items()}.get("x-requests-available-minute"),
                      "next_poll_seconds": int(next_poll_interval(matches, now).total_seconds())}
             conn.execute("UPDATE ingest.runs SET status='SUCCEEDED', finished_at=%s, stats=%s WHERE run_id=%s",

@@ -124,11 +124,11 @@ def test_event_id_depends_on_content_not_observation_time():
     later = events.build_event(**common, observed_at=NOW + timedelta(hours=1))
     changed = events.build_event(**{**common, "payload": {"a": 2}}, observed_at=NOW)
     assert first["event_id"] == later["event_id"] != changed["event_id"]
-    assert events.decode(events.encode(first)) == first
+    assert json.loads(events.encode(first)) == first   # 계약 검사를 거친 decode는 test_contracts에서
 
 
 @pytest.mark.parametrize("raw, reason", [
-    (b"not json", "INVALID_JSON"), (b'{"a": 1}', "MISSING_FIELDS"), (b"\xff\xfe", "INVALID_JSON"),
+    (b"not json", "INVALID_JSON"), (b'{"a": 1}', "SCHEMA_VIOLATION"), (b"\xff\xfe", "INVALID_JSON"),
 ])
 def test_decode_rejects_bad_messages(raw, reason):
     with pytest.raises(ValueError, match=reason):

@@ -1,13 +1,15 @@
 """Kafka 소비자 → Silver(로드맵 2c). 경기 이벤트를 silver.live_match_revisions에 버전으로 쌓는다.
 
 이벤트 하나를 처리하는 규칙(handle_match_event)
-1. 형식이 틀리거나 팀이 대조표에 없으면 저장하지 않고 silver.stream_rejections에 이유를 남긴다.
+1. 계약(JSON Schema, contracts.py)을 어기거나 팀이 대조표에 없으면 저장하지 않고 silver.stream_rejections에 이유를 남기고,
+   원본은 오류 큐(<토픽>.dlq)로 옮긴다(6c). 대조표를 고친 뒤 오류 큐에서 다시 보낼 수 있다(pipelines/streaming/dlq.py).
 2. 경기(리그·시즌·홈·원정)가 없으면 만든다. 경기 정체성은 소스와 무관하다.
 3. 직전 버전과 내용이 같거나, 이미 반영했던 같은 event_id면 중복으로 건너뛴다(재전송·재처리에도 결과가 같다).
 4. 직전 버전보다 published_at이 이른 이벤트는 "늦게 도착한 옛 정보"라 최신 값을 덮지 않도록 거부한다(STALE_EVENT).
 5. 그 밖에는 다음 버전을 추가한다.
 
 오프셋은 DB 트랜잭션을 커밋한 뒤에 커밋한다(at-least-once + 멱등 저장 = 결과적으로 한 번 처리한 효과).
+오류 큐로 보낸 메시지는 브로커 저장을 확인(flush)한 뒤에 DB·오프셋을 커밋한다. 그래서 거부한 메시지가 어디에도 없이 사라지지 않는다.
 실행: python -m pipelines.streaming.match_consumer [--until-idle]
 """
 import argparse
@@ -23,6 +25,7 @@ from ..aliases import ALIAS_FILE, load_alias_file, sync_aliases
 from ..config import load_settings
 from ..db import connect, migrate
 from . import events, kafka_io
+from .contracts import ContractViolation
 
 GROUP_ID = "silver-match-writer"
 # 이 소비자가 읽는 토픽. 토픽마다 처리 함수가 다르다(dispatch_handler).
@@ -52,14 +55,17 @@ def handle_match_event(conn: psycopg.Connection, raw: bytes, *, topic: str, part
     position = {"topic": topic, "partition": partition, "offset": offset, "now": now}
     try:
         event = events.decode(raw)
-    except ValueError as exc:
-        return reject(conn, event_id=None, reason=str(exc), detail={"raw": raw[:500].decode("utf-8", "replace")}, **position)
-    payload, source_id = event["payload"], event["source_id"]
-    try:
-        competition, season = payload["competition"], payload["season"]
-        home_key, away_key, external_id = payload["home_team_id"], payload["away_team_id"], payload["external_match_id"]
-    except KeyError as exc:
-        return reject(conn, event_id=event["event_id"], reason="MISSING_PAYLOAD_FIELD", detail={"field": str(exc)}, **position)
+    except ContractViolation as exc:
+        event_id = None
+        try:
+            event_id = json.loads(raw).get("event_id")
+        except (ValueError, AttributeError):
+            pass
+        return reject(conn, event_id=event_id if isinstance(event_id, str) else None, reason=exc.reason,
+                      detail={**exc.detail, "raw": raw[:500].decode("utf-8", "replace")}, **position)
+    payload, source_id = event["payload"], event["source_id"]   # 필수 필드와 타입은 계약이 보장한다
+    competition, season = payload["competition"], payload["season"]
+    home_key, away_key, external_id = payload["home_team_id"], payload["away_team_id"], payload["external_match_id"]
     teams = dict(conn.execute("SELECT alias, team_id FROM silver.team_aliases WHERE source_id=%s AND alias = ANY(%s)",
                               (source_id, [home_key, away_key])).fetchall())
     if home_key not in teams or away_key not in teams:
@@ -101,6 +107,21 @@ def dispatch_handler(topic: str, settings=None):
 
 
 ASSIGNMENT_TIMEOUT_SECONDS = 30   # until_idle 모드에서 파티션 배정을 기다리는 최대 시간
+# 오류 큐로 보내는 거부 사유. 계약 위반은 고칠 수 없는 원본이라 증거로, UNMAPPED_TEAM은 대조표를 고친 뒤 다시 보낼 수 있어서.
+# STALE_EVENT(늦게 온 옛 정보)는 규칙대로 버린 정상 동작이라 보내지 않는다.
+DLQ_REASONS = {"INVALID_JSON", "SCHEMA_VIOLATION", "UNSUPPORTED_SCHEMA_VERSION", "UNKNOWN_EVENT_TYPE", "EVENT_ID_MISMATCH",
+               "UNMAPPED_TEAM"}
+
+
+def dead_letter_headers(conn, message, reason: str, group_id: str, now: datetime) -> dict[str, str]:
+    """오류 큐 메시지의 헤더: 원래 위치, 사유, 거부 기록의 detail(어디가 왜 틀렸는지). 값(원본 바이트)은 그대로 둔다."""
+    row = conn.execute("""SELECT detail FROM silver.stream_rejections
+                          WHERE topic=%s AND partition=%s AND "offset"=%s AND reason=%s""",
+                       (message.topic(), message.partition(), message.offset(), reason)).fetchone()
+    detail = {key: value for key, value in (row[0] if row else {}).items() if key != "raw"}
+    return {"dlq.reason": reason, "dlq.source_topic": message.topic(), "dlq.source_partition": str(message.partition()),
+            "dlq.source_offset": str(message.offset()), "dlq.consumer_group": group_id, "dlq.failed_at": now.isoformat(),
+            "dlq.detail": events.canonical_json(detail)[:1000]}
 
 
 def run(*, topics=None, group_id: str = GROUP_ID, settings=None, until_idle: bool = False, idle_polls: int = 5,
@@ -112,9 +133,11 @@ def run(*, topics=None, group_id: str = GROUP_ID, settings=None, until_idle: boo
     ASSIGNMENT_TIMEOUT_SECONDS 안에 안 되면 조용히 끝내지 않고 오류를 낸다.
     """
     settings = settings or load_settings()
+    topics = topics or TOPICS
     kafka_io.ensure_topics(settings)
-    kafka_consumer = kafka_io.consumer(group_id, topics or TOPICS, settings)
-    counts, empty_polls = {}, 0
+    kafka_io.ensure_topics(settings, {kafka_io.dlq_topic(topic): 1 for topic in topics})
+    kafka_consumer = kafka_io.consumer(group_id, topics, settings)
+    counts, empty_polls, dlq_producer = {}, 0, None
     assignment_deadline = time.monotonic() + ASSIGNMENT_TIMEOUT_SECONDS
     try:
         with connect(settings) as conn:
@@ -143,9 +166,19 @@ def run(*, topics=None, group_id: str = GROUP_ID, settings=None, until_idle: boo
                         outcome = handle(conn, message.value(), topic=message.topic(), partition=message.partition(),
                                          offset=message.offset(), now=now)
                         counts[outcome] = counts.get(outcome, 0) + 1
+                        reason = outcome.split(":", 1)[1] if outcome.startswith("REJECTED:") else None
+                        if reason in DLQ_REASONS:
+                            dlq_producer = dlq_producer or kafka_io.producer(settings, client_id=f"{group_id}-dlq")
+                            kafka_io.publish(dlq_producer, kafka_io.dlq_topic(message.topic()), message.key(),
+                                             message.value(), dead_letter_headers(conn, message, reason, group_id, now))
+                            counts["DEAD_LETTERED"] = counts.get("DEAD_LETTERED", 0) + 1
+                    if dlq_producer:
+                        kafka_io.flush(dlq_producer)   # 오류 큐 저장을 확인한 뒤에 DB를 커밋(실패하면 묶음 전체를 다시)
                 kafka_consumer.commit(asynchronous=False)
     finally:
         kafka_consumer.close()
+        if dlq_producer:
+            dlq_producer.flush(5)
     return counts
 
 

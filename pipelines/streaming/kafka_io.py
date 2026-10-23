@@ -14,7 +14,16 @@ from ..config import Settings, load_settings
 TOPICS = {
     "fdorg.matches.v1": 3,        # football-data.org 경기 일정·상태·점수
     "replay.matches.v1": 3,       # 과거 시즌 재생(소비자 검증용)
+    # 오류 큐(dead letter, 6c): 계약을 어겼거나 지금은 처리할 수 없는 메시지의 원본. 순서가 중요하지 않아 파티션 1개.
+    "fdorg.matches.v1.dlq": 1,
+    "replay.matches.v1.dlq": 1,
 }
+DLQ_SUFFIX = ".dlq"
+
+
+def dlq_topic(topic: str) -> str:
+    """원래 토픽 → 그 토픽의 오류 큐 이름."""
+    return topic + DLQ_SUFFIX
 
 
 def admin(settings: Settings | None = None) -> AdminClient:
@@ -61,10 +70,12 @@ def producer(settings: Settings | None = None, client_id: str = "sports-pipeline
                      "linger.ms": 20, "compression.type": "lz4"})
 
 
-def publish(kafka_producer: Producer, topic: str, key: str, value: bytes) -> None:
+def publish(kafka_producer: Producer, topic: str, key: str | bytes | None, value: bytes,
+            headers: dict[str, str] | None = None) -> None:
     """메시지 하나를 보낸다(비동기). 실패하면 flush 때 예외로 드러나도록 전달 결과를 확인한다."""
     errors = []
-    kafka_producer.produce(topic, key=key.encode("utf-8"), value=value,
+    kafka_producer.produce(topic, key=key.encode("utf-8") if isinstance(key, str) else key, value=value,
+                           headers=[(name, text.encode("utf-8")) for name, text in (headers or {}).items()] or None,
                            on_delivery=lambda err, msg: errors.append(err) if err else None)
     kafka_producer.poll(0)
     if errors:

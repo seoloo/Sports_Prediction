@@ -5,13 +5,13 @@
 - published_at: 출처가 그 내용을 발표·갱신한 시각(모르면 None). observed_at: 우리가 받은 시각.
   이 두 시각이 기준 시각(as_of) 선택과 "늦게 도착한 옛 이벤트" 판단에 쓰인다.
 - schema_version: 형식이 바뀌면 올린다. 소비자는 모르는 버전을 거부한다.
+형식 자체는 JSON Schema 계약으로 검사한다(contracts.py, schemas/, 6c).
 """
 import hashlib
 import json
 from datetime import datetime
 
 SCHEMA_VERSION = 1
-REQUIRED_FIELDS = ("schema_version", "event_id", "source_id", "event_type", "key", "published_at", "observed_at", "payload")
 
 
 def canonical_json(value) -> str:
@@ -19,14 +19,20 @@ def canonical_json(value) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
 
 
+def event_id(*, source_id: str, event_type: str, key: str, payload: dict, published_at: str | None) -> str:
+    """관찰 시각을 뺀 내용의 해시. 같은 내용을 다시 받아도 같은 값이 된다(소비자가 다시 계산해 맞춰 본다)."""
+    content = {"source_id": source_id, "event_type": event_type, "key": key, "payload": payload,
+               "published_at": published_at}
+    return hashlib.sha256(canonical_json(content).encode()).hexdigest()
+
+
 def build_event(*, source_id: str, event_type: str, key: str, payload: dict,
                 published_at: datetime | None, observed_at: datetime) -> dict:
-    """이벤트 dict를 만든다. event_id는 관찰 시각을 빼고 계산해, 같은 내용을 다시 받아도 같은 값이 된다."""
+    """이벤트 dict를 만든다."""
     content = {"source_id": source_id, "event_type": event_type, "key": key, "payload": payload,
                "published_at": published_at.isoformat() if published_at else None}
-    return {"schema_version": SCHEMA_VERSION,
-            "event_id": hashlib.sha256(canonical_json(content).encode()).hexdigest(),
-            **content, "observed_at": observed_at.isoformat()}
+    return {"schema_version": SCHEMA_VERSION, "event_id": event_id(**content), **content,
+            "observed_at": observed_at.isoformat()}
 
 
 def encode(event: dict) -> bytes:
@@ -34,13 +40,11 @@ def encode(event: dict) -> bytes:
 
 
 def decode(raw: bytes) -> dict:
-    """바이트 → 이벤트 dict. 형식이 틀리면 ValueError(소비자가 거부 사유로 기록한다)."""
+    """바이트 → 계약을 지킨 이벤트 dict. 어기면 ContractViolation(ValueError, 소비자가 사유를 기록하고 오류 큐로 옮긴다)."""
+    from .contracts import ContractViolation, check
     try:
         event = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("INVALID_JSON") from exc
-    if not isinstance(event, dict) or any(field not in event for field in REQUIRED_FIELDS):
-        raise ValueError("MISSING_FIELDS")
-    if event["schema_version"] != SCHEMA_VERSION:
-        raise ValueError("UNSUPPORTED_SCHEMA_VERSION")
+        raise ContractViolation("INVALID_JSON", {"message": str(exc)[:300]}) from exc
+    check(event)
     return event

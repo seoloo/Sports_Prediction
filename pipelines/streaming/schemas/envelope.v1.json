@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "envelope.v1.json",
+  "title": "이벤트 겉봉투 v1",
+  "description": "모든 Kafka 이벤트가 같은 모양으로 감싸는 겉봉투. 필드를 더하거나 빼려면 schema_version을 올린다(엄격: 모르는 필드 거부).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "source_id", "event_type", "key", "published_at", "observed_at", "payload"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "event_id": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "출처·종류·키·내용·발표 시각의 SHA-256"},
+    "source_id": {"type": "string", "minLength": 1},
+    "event_type": {"type": "string", "minLength": 1},
+    "key": {"type": "string", "minLength": 1},
+    "published_at": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "description": "출처가 발표·갱신한 시각. 시간대가 없는 시각은 받지 않는다(시점 선택이 틀어진다). 모르면 null"
+    },
+    "observed_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "payload": {"type": "object"}
+  }
+}

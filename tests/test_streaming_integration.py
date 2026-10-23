@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from pipelines.ingest import football_data_org as fdorg
-from pipelines.streaming import events, kafka_io, match_consumer
+from pipelines.streaming import dlq, events, kafka_io, match_consumer
 from tests.test_pipeline_integration import isolated_settings, query  # noqa: F401 (fixture 재사용)
 
 API_SAMPLE = (Path(__file__).parent / "fixtures" / "fdorg_matches_sample.json").read_bytes()
@@ -35,14 +35,15 @@ def stream(isolated_settings, tmp_path):
         f"football-data-org,{i},{name} FC,test\n" for i, name in enumerate(["Alpha", "Beta", "Gamma", "Delta"], 1)),
         encoding="utf-8")
     yield isolated_settings, topic, aliases
-    kafka_io.delete_topics([topic], isolated_settings)
+    kafka_io.delete_topics([topic, kafka_io.dlq_topic(topic)], isolated_settings)
 
 
-def match_event(*, score, published, match_id="9001", home="1", away="2", status="FINISHED"):
+def match_event(*, score, published, match_id="9001", home="1", away="2", status="FINISHED", **extra):
     payload = {"external_match_id": match_id, "utc_kickoff": "2025-08-16T14:00:00Z", "status": status, "matchday": 1,
                "home_team_id": home, "home_team_name": "x", "away_team_id": away, "away_team_name": "y",
                "ft_home": score[0], "ft_away": score[1], "ht_home": None, "ht_away": None, "duration": "REGULAR",
-               "last_updated": published.isoformat(), "competition": "en.1", "season": "2025-26", "raw_file_id": None}
+               "last_updated": published.isoformat(), "competition": "en.1", "season": "2025-26", "raw_file_id": None,
+               **extra}
     return events.encode(events.build_event(source_id="football-data-org", event_type="match_snapshot", key=match_id,
                                             payload=payload, published_at=published, observed_at=published))
 
@@ -64,11 +65,14 @@ def test_duplicates_late_events_and_bad_messages(stream):
     v1 = match_event(score=(1, 0), published=T0)
     v2 = match_event(score=(2, 0), published=T0 + timedelta(minutes=30))
     stale = match_event(score=(1, 1), published=T0 + timedelta(minutes=10))  # v2보다 이전 정보가 늦게 도착
+    # 6c: 실제로 football-data.org가 보낸 적 있는 "상태 칸에 날짜" 이벤트(해시는 맞음, 계약 위반)
+    weird = match_event(score=(None, None), published=T0, match_id="9010", status="2026-10-21 18:00:00Z")
     send(s, topic, [("9001", v1), ("9001", v1), ("9001", v2), ("9001", stale), ("bad", b"{not json"),
-                    ("9009", match_event(score=(0, 0), published=T0, match_id="9009", home="1", away="77"))])
+                    ("9009", match_event(score=(0, 0), published=T0, match_id="9009", home="1", away="77")),
+                    ("9010", weird)])
     counts = consume(s, topic, aliases)
     assert counts == {"INSERTED": 2, "DUPLICATE": 1, "REJECTED:STALE_EVENT": 1, "REJECTED:INVALID_JSON": 1,
-                      "REJECTED:UNMAPPED_TEAM": 1}
+                      "REJECTED:UNMAPPED_TEAM": 1, "REJECTED:SCHEMA_VIOLATION": 1, "DEAD_LETTERED": 3}
     revisions = query(s, "SELECT revision_no, ft_home, published_at FROM silver.live_match_revisions ORDER BY revision_no")
     assert [(r[0], r[1]) for r in revisions] == [(1, 1), (2, 2)]
     # 기준 시각 함수: 발표 시각뿐 아니라 우리가 받은 시각도 기준 시각 이전이어야 한다.
@@ -79,9 +83,32 @@ def test_duplicates_late_events_and_bad_messages(stream):
 
     # 같은 토픽을 처음부터 다시 처리해도(새 소비자 그룹) Silver는 그대로다: 멱등 저장.
     again = consume(s, topic, aliases)
-    assert again == {"DUPLICATE": 3, "REJECTED:STALE_EVENT": 1, "REJECTED:INVALID_JSON": 1, "REJECTED:UNMAPPED_TEAM": 1}
+    assert again == {"DUPLICATE": 3, "REJECTED:STALE_EVENT": 1, "REJECTED:INVALID_JSON": 1, "REJECTED:UNMAPPED_TEAM": 1,
+                     "REJECTED:SCHEMA_VIOLATION": 1, "DEAD_LETTERED": 3}
     assert query(s, "SELECT count(*) FROM silver.live_match_revisions")[0][0] == 2
-    assert query(s, "SELECT count(*) FROM silver.stream_rejections")[0][0] == 3
+    assert query(s, "SELECT count(*) FROM silver.stream_rejections")[0][0] == 4
+
+    # 오류 큐: 원본 바이트 그대로, 원래 위치·사유·어디가 틀렸는지가 헤더에. 두 번 옮긴 같은 메시지는 한 건으로 센다.
+    report = dlq.summary(kafka_io.dlq_topic(topic), s)
+    assert report["messages"] == 3 and report["by_reason"] == {"INVALID_JSON": 1, "UNMAPPED_TEAM": 1, "SCHEMA_VIOLATION": 1}
+    assert report["examples"]["SCHEMA_VIOLATION"]["detail"]["path"] == "/payload/status"
+    raw = {item["dlq.reason"]: item["value"] for item in dlq.read_all(kafka_io.dlq_topic(topic), s)}
+    assert raw["INVALID_JSON"] == b"{not json" and raw["SCHEMA_VIOLATION"] == weird
+
+
+def test_dead_letters_can_be_replayed_after_fixing_the_alias_table(stream):
+    s, topic, aliases = stream
+    unknown = match_event(score=(3, 1), published=T0, match_id="9020", home="1", away="77")
+    send(s, topic, [("9020", unknown), ("bad", b"{not json")])
+    group = f"test-{uuid.uuid4().hex[:8]}"
+    assert consume(s, topic, aliases, group=group)["DEAD_LETTERED"] == 2
+    with aliases.open("a", encoding="utf-8") as file:
+        print("football-data-org,77,Omega FC,test", file=file)
+    # 기본은 UNMAPPED_TEAM만 다시 보낸다(깨진 JSON은 다시 보내도 또 거부되므로).
+    assert dlq.replay(kafka_io.dlq_topic(topic), settings=s) == {
+        "topic": kafka_io.dlq_topic(topic), "reasons": ["UNMAPPED_TEAM"], "replayed": {topic: 1}}
+    assert consume(s, topic, aliases, group=group) == {"INSERTED": 1}   # 같은 그룹: 다시 보낸 메시지만 새로 읽음
+    assert query(s, "SELECT external_match_id, ft_home FROM silver.live_match_revisions") == [("9020", 3)]
 
 
 def test_committed_offsets_are_not_reprocessed(stream):
@@ -140,3 +167,27 @@ def test_season_replay_reaches_the_source_state_despite_faults(stream):
     finally:
         with pg.connect(s.postgres_conninfo, autocommit=True) as admin:
             admin.execute(f'DROP DATABASE "{target.postgres_db}" WITH (FORCE)')
+
+
+def test_poll_once_does_not_publish_events_that_break_the_contract(stream):
+    """6c 생산자 쪽 검사: API가 상태 칸에 날짜를 넣어 보낸 경기는 토픽에 넣지 않고 품질 문제로 남긴다."""
+    s, topic, aliases = stream
+    s = s.__class__(**{**s.__dict__, "football_data_org_api_key": "test-key"})
+    sample = json.loads(API_SAMPLE)
+    sample["matches"][2]["status"] = "2026-10-21 18:00:00Z"
+
+    class Response(io.BytesIO):
+        headers = {"X-Requests-Available-Minute": "9"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    body = json.dumps(sample).encode()
+    stats = fdorg.poll_once("PL", "2025-26", settings=s, opener=lambda request, timeout: Response(body), topic=topic, now=T0)
+    assert (stats["events_published"], stats["contract_violations"]) == (2, 1)
+    issue = query(s, "SELECT issue_code, record_index, detail->>'path', detail->>'reason' FROM silver.quality_issues")
+    assert issue == [("CONTRACT_VIOLATION", 2, "/payload/status", "SCHEMA_VIOLATION")]
+    assert consume(s, topic, aliases) == {"INSERTED": 2}   # 소비자에는 계약을 지킨 이벤트만 도착
