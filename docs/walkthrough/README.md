@@ -30,5 +30,6 @@
 | 6b | [NBA Spark 대조](6b_nba_spark_reconcile.md) | 순위 규칙까지 두 엔진이 따로 구현해 칸 단위로 맞추기, 원자료에서 시작해야 독립 검증인 이유 |
 | 6c | [Kafka 계약과 오류 큐](6c_kafka_contracts.md) | JSON Schema 계약과 호환 규칙, 생산자·소비자 양쪽 검사, 오류 큐 순서 보장, 실제 원본에서 찾은 출처 오류 21건 |
 | 7a | [Iceberg 레이크하우스](7a_iceberg_lakehouse.md) | 파일 묶음과 테이블 형식의 차이, SQL 카탈로그, 내보내기 ID 스냅샷과 시간 여행, 두 시간 여행(Postgres·Iceberg)이 같은 답인지 |
+| 7b | [Spark ↔ Iceberg](7b_spark_iceberg.md) | 한 카탈로그를 두 엔진(PyIceberg·Spark)이 함께 쓰기, JDBC 카탈로그와 S3FileIO, `VERSION AS OF` 시간 여행, 외부 jar 공급망 확인 |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md), 주제별(예외 처리·메달리온·기술 스택) 정리는 [면접 준비 문서](../interview/README.md)를 함께 보세요.

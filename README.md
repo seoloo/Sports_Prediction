@@ -78,6 +78,7 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | 6b | NBA 순위표를 Spark로 원자료부터 다시 계산해 dbt와 대조(불일치 0) | [6b](docs/walkthrough/6b_nba_spark_reconcile.md) |
 | 6c | Kafka 이벤트 JSON Schema 계약(생산자·소비자 양쪽 검사) + 오류 큐(dead letter)·다시 보내기 | [6c](docs/walkthrough/6c_kafka_contracts.md) |
 | 7a | Iceberg 레이크하우스: 내보내기마다 테이블 스냅샷, 내보내기 ID·시각으로 시간 여행, dbt 시점 재계산과 일치 | [7a](docs/walkthrough/7a_iceberg_lakehouse.md) |
+| 7b | Spark가 같은 카탈로그로 Iceberg 테이블을 시간 여행으로 읽고 결과도 Iceberg로(jar 판·SHA-512 고정), 불일치 0 | [7b](docs/walkthrough/7b_spark_iceberg.md) |
 
 평가 결과(시험 시즌 2023-24 이후, 로그 손실이 낮을수록 좋음):
 

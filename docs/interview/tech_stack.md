@@ -142,7 +142,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 - **역할:** Gold를 Parquet로 S3 `lake` 버킷에 내보내고, 시간순 특징을 Spark로 다시 계산해 dbt 결과와 대조한다.
 - **왜 지금:** 자료가 커서가 아니다(Postgres가 몇 초에 처리). 자료가 커져 Spark로 옮길 때 결과가 바뀌지 않는다는 것을 미리 증명하려는 것이다. 2,660경기 × 18열 대조 불일치 0.
 - **구성:** Java 17 + pyspark를 담은 컨테이너(`infra/spark/Dockerfile`, compose `spark` 프로필). 매일 자동 실행은 Airflow 이미지 안의 별도 가상환경(`/home/airflow/spark-venv`)에서 한다. Airflow에 docker.sock(사실상 관리자 권한)을 넘기지 않기 위해서다. Windows에서 Spark로 파일을 쓰려면 winutils가 필요해 Linux 컨테이너로 돌린다. 미니 PC·쿠버네티스로 그대로 옮길 수 있다.
-- **S3 연결:** s3a 커넥터 대신 boto3로 내려받고 올린다. s3a는 hadoop-aws와 수백 MB의 AWS SDK가 필요해 수 MB 자료에는 과하다. 커지면 바꾼다.
+- **S3 연결:** 처음(4a)에는 s3a 커넥터 대신 boto3로 내려받고 올렸다(hadoop-aws와 판을 맞춘 AWS SDK가 필요해 과했다). 7b부터는 Iceberg 테이블을 S3FileIO로 직접 읽고 쓴다(목록 조회 없이 메타데이터가 가리키는 객체만).
 - **Parquet:** 시즌별 Hive 방식 파티션, 열 형식 명시, 시각은 UTC 마이크로초(Spark 기본 INT96은 다른 도구가 시간대 없이 읽음).
 - **대안:** DuckDB(한 대에서 Parquet를 SQL로 빠르게)도 맞지만, 여러 대로 늘어나는 경로와 채용 수요를 생각해 Spark를 골랐다.
 ### Apache Iceberg + PyIceberg 0.12.0 (7a)
@@ -151,7 +151,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 - **카탈로그:** PyIceberg SQL 카탈로그(Postgres `lakehouse` 스키마). REST·Hive 카탈로그 서버를 따로 띄우지 않는다. 연결은 SQLAlchemy + 기존 psycopg 3.
 - **검증:** 매일 모든 스냅샷을 그 내보내기 파일과 행 단위로 대조(불일치면 작업 실패). 테스트에서는 dbt를 `as_of`로 다시 계산한 Gold와 옛 스냅샷이 같은지 확인.
 - **대안:** Delta Lake는 Spark 중심이고 Python 쪽 쓰기 도구(delta-rs)가 따로다. Iceberg는 엔진 중립(Spark·Trino·DuckDB·Snowflake)이고 카탈로그를 고를 수 있어 골랐다.
-- **한계:** Spark는 아직 내보내기 파일을 읽는다(Iceberg 런타임 jar가 필요, 7b).
+- **Spark(7b):** Spark도 같은 카탈로그를 Iceberg JDBC 카탈로그로 본다(PyIceberg SqlCatalog과 같은 표 구조). 입력은 `VERSION AS OF <내보내기 스냅샷>`, 결과는 `spark.*` 테이블. 파일 입출력은 Iceberg S3FileIO. jar 3개(Iceberg Spark 런타임 1.12.0, AWS 번들 1.12.0, Postgres JDBC 42.7.14)는 판·SHA-512를 고정해 이미지 빌드 때 받는다(`infra/spark/fetch_jars.py`).
 
 - **쓰는 곳:** `pipelines/lake/`, `tests/test_lake.py`, `tests/test_spark_features.py`(CI는 Spark 이미지 안에서 `REQUIRE_SPARK=1`로 실행).
 

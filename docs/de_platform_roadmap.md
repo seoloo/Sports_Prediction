@@ -74,7 +74,8 @@ Airflow가 전체 작업 순서와 재시도를 관리합니다.
 | 6b. NBA Spark 대조 ✅ | NBA 끝난 경기 원자료를 Parquet로 내보내 Spark로 순위표를 처음부터 다시 계산, dbt와 칸 단위 대조(매일 DAG) | 270행 × 9열 불일치 0 | 없음 |
 | 6c. Kafka 스키마 계약 ✅ | 이벤트 형식을 JSON Schema로(겉봉투 엄격, 내용은 추가만 허용, event_id 재계산), 생산자·소비자 양쪽 검사, 위반·대조표 밖 팀은 오류 큐(dead letter)로, 오류 큐 요약·다시 보내기 도구 | 깨진 메시지가 Silver에 들어가지 않음, 실제 원본에서 출처 오류 21건 발견 | 없음 |
 | 7a. Iceberg 레이크하우스 ✅ | 내보내기마다 Iceberg 테이블 5개(`gold.*`)에 스냅샷 하나(PyIceberg, Postgres SQL 카탈로그, 시즌 파티션), 내보내기 ID·시각으로 시간 여행, 매일 DAG에서 모든 스냅샷을 내보내기와 대조 | 옛 스냅샷 = dbt를 그 시점으로 다시 계산한 Gold, 실제 5개 테이블 불일치 0 | 없음 |
-| 7b. Spark가 Iceberg를 직접 읽기 | Spark에 Iceberg 런타임을 붙여 내려받기 대신 같은 카탈로그의 테이블을 읽고, 결과도 Iceberg 테이블로 | Spark 결과가 지금과 같음(불일치 0) | Iceberg jar 내려받기 승인 |
+| 7b. Spark가 Iceberg를 직접 읽기 ✅ | Spark에 Iceberg 런타임·S3FileIO·JDBC 카탈로그(jar 3개, 판·SHA-512 고정), 입력은 내보내기 스냅샷으로 시간 여행(`VERSION AS OF`), 결과는 `spark.*` Iceberg 테이블, 대조도 Iceberg에서 | 12,264 × 18열, 270 × 9열 불일치 0, 다시 실행하면 계산 건너뜀 | jar 내려받기 승인(완료) |
+| 7c. 운영 상태 보기 | 수집 신선도·작업 실패·API 크레딧·오류 큐·주간 채점을 한곳에 | 하루 상태를 한 화면에서 확인 | 보는 방식 결정(아래 계획) |
 
 3단계 검증을 통과하기 전에는 확률을 표시하지 않습니다(WITHHELD).
 

@@ -70,7 +70,7 @@
     <div class="col">
       <div class="label">Gold · Lake</div>
       <div class="card box"><h3>dbt</h3><p>순위표·시점 특징·배당 확률, 품질 테스트 38개, 과거 시점 재계산</p></div>
-      <div class="card box"><h3>Parquet · Iceberg · Spark</h3><p>Gold를 레이크로 내보내 Iceberg 테이블 스냅샷(시간 여행)으로 쌓고, Spark로 독립 재계산해 dbt와 행 단위 대조</p><span class="n">불일치 0</span></div>
+      <div class="card box"><h3>Parquet · Iceberg · Spark</h3><p>Gold를 레이크로 내보내 Iceberg 테이블 스냅샷(시간 여행)으로 쌓고, Spark가 같은 테이블을 읽어 독립 재계산·결과도 Iceberg로, dbt와 행 단위 대조</p><span class="n">불일치 0</span></div>
       <div class="card box"><h3>백테스트 · 평가</h3><p>시간순 주 단위 재학습, 블록 부트스트랩, 검증 기준</p><span class="n">예측 60만 · 실행 589</span></div>
     </div>
     <div class="col">
@@ -83,7 +83,7 @@
 
   <div class="bars">
     <div class="card bar"><div class="em">⚙️</div><div><b>Airflow DAG 4개</b><span>매일 축구 수집 → dbt → Spark 대조 · 매일 NBA 수집 · 30분마다 배당·스냅샷·알림 · 매주 채점</span></div></div>
-    <div class="card bar"><div class="em">🐳</div><div><b>Docker Compose + GitHub Actions</b><span>모든 포트 127.0.0.1 · 푸시마다 테스트 216개, Spark 컨테이너 테스트, 수집→dbt 종단 실행</span></div></div>
+    <div class="card bar"><div class="em">🐳</div><div><b>Docker Compose + GitHub Actions</b><span>모든 포트 127.0.0.1 · 푸시마다 테스트 217개, Spark 컨테이너 테스트, 수집→dbt 종단 실행</span></div></div>
   </div>
   <div class="rule"><span>모든 시각은 UTC로 저장, 화면은 한국 시각</span><span>키·비밀번호는 .env에만(Git 제외)</span><span>검증 전 모델의 확률은 보여 주지 않음</span></div>
 </body>
