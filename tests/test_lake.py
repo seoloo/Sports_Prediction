@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 import psycopg
+import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
@@ -141,3 +142,54 @@ def test_nba_standings_reconcile_detects_differences(lake):
     store.put_object(Bucket=TEST_LAKE_BUCKET, Key=target, Body=as_spark_output(table))
     result = reconcile.reconcile_nba(store, TEST_LAKE_BUCKET, snapshot)
     assert not result["passed"] and result["mismatches"] == 2 and {e["column"] for e in result["examples"]} == {"position"}
+
+
+def test_iceberg_snapshots_time_travel_and_agree_with_dbt_as_of(lake):
+    """7a: 내보내기마다 Iceberg 스냅샷 하나, 같은 내보내기는 다시 쓰지 않음, 옛 스냅샷 = 그 시점으로 다시 계산한 dbt Gold."""
+    from pipelines.lake import iceberg
+    s, store = lake
+    with psycopg.connect(s.postgres_conninfo) as conn:
+        first = export.export(conn, store, TEST_LAKE_BUCKET)
+    published = iceberg.publish(s, store, TEST_LAKE_BUCKET, first["snapshot"])
+    assert all(table["written"] for table in published["tables"].values())
+    assert published["tables"]["team_match_results"]["rows"] == first["tables"]["team_match_results"]["rows"]
+    again = iceberg.publish(s, store, TEST_LAKE_BUCKET, first["snapshot"])
+    assert not any(table["written"] for table in again["tables"].values())   # 멱등
+    between = datetime.now(timezone.utc)
+
+    # 이틀 뒤 소스가 첫 경기 점수를 정정(Alpha 2-1 → 3-1)했다고 치고 다시 만들어 내보낸다.
+    corrected = json.loads(SAMPLE_PATH.read_bytes())
+    corrected["matches"][0]["score"]["ft"] = [3, 1]
+    ingest(s, json.dumps(corrected).encode(), "2025-08-19T00:00:00+00:00")
+    build(s)
+    with psycopg.connect(s.postgres_conninfo) as conn:
+        second = export.export(conn, store, TEST_LAKE_BUCKET)
+    assert second["snapshot"] != first["snapshot"]
+    iceberg.publish(s, store, TEST_LAKE_BUCKET, second["snapshot"])
+
+    alpha = lambda data: sorted(row["goals_for"] for row in data.to_pylist() if row["team"] == "Alpha FC")
+    assert alpha(iceberg.read(s, TEST_LAKE_BUCKET, "team_match_results")) == [3]
+    old = iceberg.read(s, TEST_LAKE_BUCKET, "team_match_results", export=first["snapshot"])
+    assert alpha(old) == [2]
+    assert alpha(iceberg.read(s, TEST_LAKE_BUCKET, "team_match_results", as_of=between)) == [2]   # 시각으로 시간 여행
+
+    # 두 시간 여행이 같은 답: Postgres 기준 시각으로 다시 계산한 Gold = 그때 쓴 Iceberg 스냅샷
+    build(s, "--vars", '{as_of: "2025-08-18T00:00:00Z"}')
+    with psycopg.connect(s.postgres_conninfo) as conn:
+        rebuilt = sorted(conn.execute(export.TABLES["team_match_results"][0]).fetchall())
+    assert rebuilt == sorted(tuple(row.values()) for row in old.to_pylist())
+
+    table = iceberg.catalog(s, TEST_LAKE_BUCKET).load_table("gold.team_match_results")
+    assert [item["export"] for item in iceberg.history(table)] == [first["snapshot"], second["snapshot"]]
+    assert table.spec().fields[0].name == "season"
+    report = iceberg.verify(s, store, TEST_LAKE_BUCKET)
+    assert report["passed"] and report["snapshots_checked"] == 2 * len(export.TABLES)
+
+    # 검사가 실제로 잡는지: 내보내기와 다른 내용을 그 내보내기 ID로 써 넣으면 불일치
+    current = table.scan().to_arrow().to_pylist()
+    current[0]["goals_for"] += 1
+    table.overwrite(pa.Table.from_pylist(current, schema=iceberg.arrow_schema("team_match_results")),
+                    snapshot_properties={iceberg.SNAPSHOT_PROPERTY: second["snapshot"]})
+    report = iceberg.verify(s, store, TEST_LAKE_BUCKET)
+    assert not report["passed"] and report["mismatches"] == [
+        {"table": "team_match_results", "export": second["snapshot"], "iceberg_rows": 6, "export_rows": 6}]   # 행 수는 같고 값 하나만 다름
