@@ -10,6 +10,7 @@ Iceberg 테이블(gold.<테이블>)에 쓴다.
 - 카탈로그: PyIceberg SqlCatalog. 포인터는 Postgres lakehouse 스키마(019), 파일은 lake 버킷 iceberg/ 아래.
   Spark·Trino 등 다른 엔진도 같은 카탈로그·파일을 읽을 수 있다.
 - 시즌별 파티션(identity). 시즌 열은 내보내기 경로(season=…)에서 가져와 열로 넣는다.
+- 7b부터 Spark도 같은 카탈로그(Iceberg JDBC 카탈로그)로 gold.* 를 그 내보내기의 스냅샷으로 읽고, 결과를 spark.* 에 쓴다.
 검사(verify): 각 Iceberg 스냅샷을 그 스냅샷이 가리키는 내보내기 파일과 행 단위로 맞춰 본다.
 """
 import json
@@ -22,6 +23,8 @@ from .export import PREFIX, TABLES
 from .reconcile import read_parquet
 
 NAMESPACE = "gold"
+SPARK_NAMESPACE = "spark"   # Spark 결과(7b): spark.match_features_pit, spark.nba_standings
+CATALOG_NAME = "lake"       # PyIceberg와 Spark가 같은 이름을 써야 같은 카탈로그 행(catalog_name)을 본다
 WAREHOUSE_PREFIX = "iceberg"
 SNAPSHOT_PROPERTY = "export.snapshot"
 
@@ -33,7 +36,7 @@ def catalog(settings, bucket: str | None = None):
     uri = URL.create("postgresql+psycopg", username=settings.postgres_user, password=settings.postgres_password,
                      host=settings.postgres_host, port=settings.postgres_port, database=settings.postgres_db,
                      query={"options": "-csearch_path=lakehouse"}).render_as_string(hide_password=False)
-    return SqlCatalog("lake", uri=uri, warehouse=f"s3://{bucket or settings.lake_bucket}/{WAREHOUSE_PREFIX}", **{
+    return SqlCatalog(CATALOG_NAME, uri=uri, warehouse=f"s3://{bucket or settings.lake_bucket}/{WAREHOUSE_PREFIX}", **{
         "s3.endpoint": settings.s3_endpoint_url, "s3.access-key-id": settings.s3_access_key,
         "s3.secret-access-key": settings.s3_secret_key, "s3.region": "us-east-1",
         "s3.force-virtual-addressing": "false"})
@@ -83,6 +86,25 @@ def history(table) -> list[dict]:
     return list(found.values())
 
 
+def snapshot_for_export(table, export: str) -> int:
+    """그 내보내기를 쓴 Iceberg 스냅샷 ID. 없으면 LookupError(다른 스냅샷으로 조용히 대신하지 않는다)."""
+    matches = [item["snapshot_id"] for item in history(table) if item["export"] == export]
+    if not matches:
+        raise LookupError(f"{table.name()}: 내보내기 {export}를 쓴 스냅샷이 없습니다.")
+    return matches[-1]
+
+
+def write_snapshot(table, data: pa.Table, export: str) -> int:
+    """테이블 전체를 data로 바꾸는 스냅샷을 커밋하고 그 ID를 돌려준다. 요약에 내보내기 ID를 남긴다."""
+    properties = {SNAPSHOT_PROPERTY: export}
+    current = table.current_snapshot()
+    if current is None or int(current.summary.get("total-records", 0)) == 0:
+        table.append(data, snapshot_properties=properties)      # 지울 것이 없다(첫 쓰기·빈 테이블)
+    else:
+        table.overwrite(data, snapshot_properties=properties)   # 전체 덮어쓰기(지우기 + 넣기 스냅샷)
+    return table.current_snapshot().snapshot_id
+
+
 def publish(settings, store, bucket: str, snapshot: str | None = None) -> dict:
     """내보내기 스냅샷을 테이블마다 Iceberg 스냅샷으로 쓴다. 이미 쓴 내보내기면 그 테이블은 건너뛴다."""
     snapshot = snapshot or json.loads(read_object(store, bucket, f"{PREFIX}/latest.json"))["snapshot"]
@@ -94,26 +116,18 @@ def publish(settings, store, bucket: str, snapshot: str | None = None) -> dict:
             result["tables"][name] = {"written": False, "reason": "ALREADY_PUBLISHED"}
             continue
         data = export_table(store, bucket, snapshot, name)
-        properties = {SNAPSHOT_PROPERTY: snapshot}
-        current = table.current_snapshot()
-        if current is None or int(current.summary.get("total-records", 0)) == 0:
-            table.append(data, snapshot_properties=properties)      # 지울 것이 없다(첫 쓰기·빈 테이블)
-        else:
-            table.overwrite(data, snapshot_properties=properties)   # 전체 덮어쓰기(지우기 + 넣기 스냅샷)
         result["tables"][name] = {"written": True, "rows": data.num_rows,
-                                  "iceberg_snapshot": table.current_snapshot().snapshot_id}
+                                  "iceberg_snapshot": write_snapshot(table, data, snapshot)}
     return result
 
 
-def read(settings, bucket: str, name: str, *, export: str | None = None, as_of: datetime | None = None) -> pa.Table:
+def read(settings, bucket: str, name: str, *, export: str | None = None, as_of: datetime | None = None,
+         namespace: str = NAMESPACE) -> pa.Table:
     """시간 여행 읽기. export(내보내기 ID) 또는 as_of(그 시각에 최신이던 스냅샷)를 주지 않으면 지금 테이블."""
-    table = catalog(settings, bucket).load_table(f"{NAMESPACE}.{name}")
+    table = catalog(settings, bucket).load_table(f"{namespace}.{name}")
     snapshot_id = None
     if export is not None:
-        matches = [item["snapshot_id"] for item in history(table) if item["export"] == export]
-        if not matches:
-            raise LookupError(f"{name}: 내보내기 {export}를 쓴 스냅샷이 없습니다.")
-        snapshot_id = matches[-1]
+        snapshot_id = snapshot_for_export(table, export)
     elif as_of is not None:
         snapshot = table.snapshot_as_of_timestamp(int(as_of.timestamp() * 1000))
         if snapshot is None:

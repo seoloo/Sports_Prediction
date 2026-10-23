@@ -1,4 +1,4 @@
-"""4a 레이크 테스트(pyspark 없이). 내보내기·대조는 Postgres·S3·dbt가 있을 때만, Parquet 변환은 단위 테스트."""
+"""4a·7a·7b 레이크 테스트(pyspark 없이). 내보내기·Iceberg·대조는 Postgres·S3·dbt가 있을 때만, Parquet 변환은 단위 테스트."""
 import io
 import json
 from dataclasses import replace
@@ -9,9 +9,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from pipelines.lake import export, reconcile
-from pipelines.lake.spark_features import OUTPUT_PREFIX
-from pipelines.object_store import client, put_if_absent
+from pipelines.lake import export, iceberg, reconcile
+from pipelines.object_store import client
 from tests.test_dbt_integration import build, dbt_settings, ingest  # noqa: F401 (fixture 재사용)
 from tests.test_pipeline_integration import SAMPLE_PATH, empty_bucket, isolated_settings  # noqa: F401
 
@@ -40,6 +39,16 @@ def test_reconcile_tolerances():
     assert reconcile.same("home_l10_gf", None, None) and not reconcile.same("home_l10_gf", None, 0.0)
 
 
+def put_spark_result(settings, name: str, rows: list[dict], schema_of: str, snapshot: str) -> None:
+    """Spark 결과 자리(Iceberg spark.<name>)에 행을 그 내보내기 ID로 써 넣는다(7b, Spark 없이 대조를 시험)."""
+    schema = iceberg.arrow_schema(schema_of)
+    cat = iceberg.catalog(settings, TEST_LAKE_BUCKET)
+    cat.create_namespace_if_not_exists(iceberg.SPARK_NAMESPACE)
+    identifier = f"{iceberg.SPARK_NAMESPACE}.{name}"
+    table = cat.load_table(identifier) if cat.table_exists(identifier) else cat.create_table(identifier, schema=schema)
+    iceberg.write_snapshot(table, pa.Table.from_pylist(rows, schema=schema), snapshot)
+
+
 @pytest.fixture
 def lake(dbt_settings):
     s = replace(dbt_settings, lake_bucket=TEST_LAKE_BUCKET)
@@ -62,20 +71,18 @@ def test_export_is_idempotent_and_reconcile_detects_differences(lake):
     assert json.loads(store.get_object(Bucket=TEST_LAKE_BUCKET, Key="exports/latest.json")["Body"].read()) == {
         "snapshot": snapshot}
 
-    # Spark 결과 자리에 dbt 결과를 그대로 두면 통과해야 한다.
-    expected_key = first["tables"]["dbt_match_features"]["files"][0]["key"]
-    payload = store.get_object(Bucket=TEST_LAKE_BUCKET, Key=expected_key)["Body"].read()
-    put_if_absent(store, TEST_LAKE_BUCKET, f"{OUTPUT_PREFIX}/snapshot={snapshot}/part-0.parquet", payload, {})
-    result = reconcile.reconcile(store, TEST_LAKE_BUCKET)
+    # Spark 결과 자리(Iceberg spark.match_features_pit)에 dbt 결과를 그대로 두면 통과해야 한다.
+    assert reconcile.reconcile(store, TEST_LAKE_BUCKET, settings=s)["passed"] is False   # 결과가 아직 없음 → 실패
+    table = reconcile.read_parquet(store, TEST_LAKE_BUCKET, f"{export.PREFIX}/{snapshot}/dbt_match_features/")
+    put_spark_result(s, "match_features_pit", table, "dbt_match_features", snapshot)
+    result = reconcile.reconcile(store, TEST_LAKE_BUCKET, settings=s)
     assert result["passed"] and result["rows_dbt"] == result["rows_spark"] == 4 and result["columns_compared"] == 18
 
-    # 값 하나를 바꾸면 그 칸만 불일치로 잡아야 한다.
-    table = pq.read_table(io.BytesIO(payload)).to_pylist()
+    # 값 하나를 바꾼 결과를 같은 내보내기 ID로 다시 쓰면(새 스냅샷) 그 칸만 불일치로 잡아야 한다.
     changed = next(row for row in table if row["home_l10_n"])
     changed["home_l10_gf"] += 0.01
-    broken = export.to_parquet([tuple(row.values()) for row in table], export.TABLES["dbt_match_features"][1])
-    store.put_object(Bucket=TEST_LAKE_BUCKET, Key=f"{OUTPUT_PREFIX}/snapshot={snapshot}/part-0.parquet", Body=broken)
-    result = reconcile.reconcile(store, TEST_LAKE_BUCKET, snapshot)
+    put_spark_result(s, "match_features_pit", table, "dbt_match_features", snapshot)
+    result = reconcile.reconcile(store, TEST_LAKE_BUCKET, snapshot, s)
     assert not result["passed"] and result["mismatches"] == 1
     assert result["examples"][0]["column"] == "home_l10_gf" and result["examples"][0]["match_id"] == changed["match_id"]
 
@@ -112,7 +119,6 @@ def test_nba_standings_reconcile_detects_differences(lake):
     """6b: NBA 순위표 대조. dbt 결과를 Spark 자리에 두면 통과, 순위 하나를 바꾸면 그 칸만 불일치."""
     from datetime import timezone
     from pipelines.ingest import balldontlie
-    from pipelines.lake.spark_features import NBA_OUTPUT_PREFIX
     from tests.test_balldontlie import CELTICS, KNICKS, game, page
     s, store = lake
     balldontlie.ingest("2025-26", pages=[page([game(1, home=CELTICS, away=KNICKS), game(2, home=KNICKS, away=CELTICS,
@@ -123,30 +129,19 @@ def test_nba_standings_reconcile_detects_differences(lake):
         manifest = export.export(conn, store, TEST_LAKE_BUCKET)
     snapshot = manifest["snapshot"]
     assert manifest["tables"]["nba_games"]["rows"] == 2 and manifest["tables"]["dbt_nba_standings"]["rows"] == 2
-    key = manifest["tables"]["dbt_nba_standings"]["files"][0]["key"]
-    payload = store.get_object(Bucket=TEST_LAKE_BUCKET, Key=key)["Body"].read()
-    target = f"{NBA_OUTPUT_PREFIX}/snapshot={snapshot}/part-0.parquet"
-
-    def as_spark_output(rows):
-        """Spark 결과처럼 시즌을 파일 안의 열로(dbt 내보내기는 시즌을 경로 season=…에 둔다)."""
-        import pyarrow as pa
-        schema = pa.schema([("season", pa.string()), *export.TABLES["dbt_nba_standings"][1]])
-        return export.to_parquet([("2025-26", *row.values()) for row in rows], schema)
-
-    table = pq.read_table(io.BytesIO(payload)).to_pylist()
-    store.put_object(Bucket=TEST_LAKE_BUCKET, Key=target, Body=as_spark_output(table))
-    result = reconcile.reconcile_nba(store, TEST_LAKE_BUCKET, snapshot)
+    table = reconcile.read_parquet(store, TEST_LAKE_BUCKET, f"{export.PREFIX}/{snapshot}/dbt_nba_standings/")
+    put_spark_result(s, "nba_standings", table, "dbt_nba_standings", snapshot)   # Spark 결과처럼 시즌이 열에
+    result = reconcile.reconcile_nba(store, TEST_LAKE_BUCKET, snapshot, s)
     assert result["passed"] and result["rows_dbt"] == result["rows_spark"] == 2 and result["columns_compared"] == 9
 
     table[0]["position"], table[1]["position"] = table[1]["position"], table[0]["position"]   # 순위를 뒤바꿈
-    store.put_object(Bucket=TEST_LAKE_BUCKET, Key=target, Body=as_spark_output(table))
-    result = reconcile.reconcile_nba(store, TEST_LAKE_BUCKET, snapshot)
+    put_spark_result(s, "nba_standings", table, "dbt_nba_standings", snapshot)
+    result = reconcile.reconcile_nba(store, TEST_LAKE_BUCKET, snapshot, s)
     assert not result["passed"] and result["mismatches"] == 2 and {e["column"] for e in result["examples"]} == {"position"}
 
 
 def test_iceberg_snapshots_time_travel_and_agree_with_dbt_as_of(lake):
     """7a: 내보내기마다 Iceberg 스냅샷 하나, 같은 내보내기는 다시 쓰지 않음, 옛 스냅샷 = 그 시점으로 다시 계산한 dbt Gold."""
-    from pipelines.lake import iceberg
     s, store = lake
     with psycopg.connect(s.postgres_conninfo) as conn:
         first = export.export(conn, store, TEST_LAKE_BUCKET)
@@ -193,3 +188,17 @@ def test_iceberg_snapshots_time_travel_and_agree_with_dbt_as_of(lake):
     report = iceberg.verify(s, store, TEST_LAKE_BUCKET)
     assert not report["passed"] and report["mismatches"] == [
         {"table": "team_match_results", "export": second["snapshot"], "iceberg_rows": 6, "export_rows": 6}]   # 행 수는 같고 값 하나만 다름
+
+
+def test_spark_iceberg_conf_points_at_the_same_catalog_and_store(tmp_path):
+    """7b: Spark 설정이 PyIceberg와 같은 카탈로그 이름·Postgres 스키마·S3 저장소를 가리키고, 고정한 jar만 쓴다."""
+    from pipelines.config import load_settings
+    from pipelines.lake.spark_features import iceberg_conf
+    for name in ("b.jar", "a.jar", "notes.txt"):
+        (tmp_path / name).write_text("x")
+    conf = iceberg_conf(load_settings(), str(tmp_path))
+    assert conf["spark.jars"].split(",") == [str(tmp_path / "a.jar"), str(tmp_path / "b.jar")]
+    catalog = f"spark.sql.catalog.{iceberg.CATALOG_NAME}"
+    assert conf[f"{catalog}.type"] == "jdbc" and conf[f"{catalog}.uri"].endswith("?currentSchema=lakehouse")
+    assert conf[f"{catalog}.io-impl"] == "org.apache.iceberg.aws.s3.S3FileIO"   # hadoop-aws(s3a) 없이
+    assert conf[f"{catalog}.warehouse"] == f"s3://{load_settings().lake_bucket}/{iceberg.WAREHOUSE_PREFIX}"

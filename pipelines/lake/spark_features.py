@@ -4,27 +4,56 @@
 dbt는 경기마다 LATERAL 하위 쿼리로 최근 N경기를 고르고, 여기서는 같은 조건의 조인 + row_number 창 함수로 고른다.
 같은 규칙을 다른 엔진·다른 방식으로 구현해 결과를 대조하는 것이 이 단계의 목적이다(pipelines/lake/reconcile.py).
 
-S3는 boto3로 내려받고 올린다. Spark의 S3 커넥터(s3a)는 hadoop-aws와 수백 MB의 AWS SDK 묶음이 필요한데,
-지금 자료는 수 MB라 과하다. 자료가 커지면 s3a로 바로 읽고 쓰는 방식으로 바꾼다.
+7b부터 입력과 결과 모두 Iceberg 테이블이다. 입력은 gold.matches 등을 "그 내보내기를 쓴 스냅샷"으로 읽고(시간 여행),
+결과는 spark.match_features_pit, spark.nba_standings에 내보내기 ID를 단 스냅샷으로 쓴다. 카탈로그는 PyIceberg와 같은
+Postgres(Iceberg JDBC 카탈로그), 파일 입출력은 Iceberg S3FileIO(AWS SDK 번들)라 hadoop-aws(s3a)가 필요 없다.
+jar는 이미지에 고정해 둔 것만 쓴다(ICEBERG_JARS, infra/spark/fetch_jars.py).
 Spark는 이 모듈 안에서만 불러온다(호스트의 다른 코드와 테스트는 pyspark 없이 돈다).
 실행(컨테이너): python -m pipelines.lake.run spark
 """
 import json
-import tempfile
+import os
 from pathlib import Path
 
-from ..object_store import put_if_absent, read_object
-from .export import PARQUET, PREFIX
+from ..object_store import read_object
+from .export import PREFIX
 
 AVAILABILITY_LAG_HOURS = 3   # 과거 재구성 가정: 결과는 시작 3시간 뒤에 알려짐(dbt 모델·dataset.py와 같은 값)
-OUTPUT_PREFIX = "spark/match_features_pit"
-NBA_OUTPUT_PREFIX = "spark/nba_standings"   # 6b
+FEATURES_TABLE, NBA_TABLE = "match_features_pit", "nba_standings"   # spark.* 결과 테이블(7b)
 
 
-def spark_session(app_name: str = "match_features_pit"):
-    """단일 컨테이너 local 모드 세션. 시간대를 UTC로 고정해 시각 계산이 실행 환경에 따라 달라지지 않게 한다."""
+def iceberg_conf(settings, jar_dir: str) -> dict:
+    """Spark가 PyIceberg와 같은 카탈로그·저장소를 보게 하는 설정(순수 함수, 테스트 가능)."""
+    from .iceberg import CATALOG_NAME, WAREHOUSE_PREFIX
+    prefix = f"spark.sql.catalog.{CATALOG_NAME}"
+    jars = sorted(str(path) for path in Path(jar_dir).glob("*.jar"))
+    return {"spark.jars": ",".join(jars),
+            "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+            prefix: "org.apache.iceberg.spark.SparkCatalog",
+            f"{prefix}.type": "jdbc",
+            f"{prefix}.uri": (f"jdbc:postgresql://{settings.postgres_host}:{settings.postgres_port}/"
+                              f"{settings.postgres_db}?currentSchema=lakehouse"),
+            f"{prefix}.jdbc.user": settings.postgres_user,
+            f"{prefix}.jdbc.password": settings.postgres_password,
+            f"{prefix}.warehouse": f"s3://{settings.lake_bucket}/{WAREHOUSE_PREFIX}",
+            f"{prefix}.io-impl": "org.apache.iceberg.aws.s3.S3FileIO",
+            f"{prefix}.s3.endpoint": settings.s3_endpoint_url,
+            f"{prefix}.s3.path-style-access": "true",
+            f"{prefix}.s3.access-key-id": settings.s3_access_key,
+            f"{prefix}.s3.secret-access-key": settings.s3_secret_key,
+            f"{prefix}.client.region": "us-east-1"}
+
+
+def spark_session(app_name: str = "match_features_pit", settings=None):
+    """단일 컨테이너 local 모드 세션. 시간대를 UTC로 고정해 시각 계산이 실행 환경에 따라 달라지지 않게 한다.
+    settings와 ICEBERG_JARS가 있으면 Iceberg 카탈로그를 붙인다."""
     from pyspark.sql import SparkSession
-    return (SparkSession.builder.master("local[2]").appName(app_name)
+    builder = SparkSession.builder.master("local[2]").appName(app_name)
+    jar_dir = os.environ.get("ICEBERG_JARS")
+    if settings is not None and jar_dir:
+        for key, value in iceberg_conf(settings, jar_dir).items():
+            builder = builder.config(key, value)
+    return (builder
             .config("spark.sql.session.timeZone", "UTC")
             .config("spark.driver.memory", "1g")
             .config("spark.sql.shuffle.partitions", "4")   # 자료가 작아 기본 200개 분할은 낭비
@@ -101,47 +130,45 @@ def compute_nba_standings(games):
             .drop("ratio").orderBy("season", "position"))
 
 
-def download_prefix(store, bucket: str, prefix: str, target: Path) -> int:
-    """S3의 prefix 아래 객체를 같은 상대 경로로 내려받는다. 받은 파일 수를 돌려준다."""
-    count = 0
-    for page in store.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
-        for item in page.get("Contents", []):
-            path = target / item["Key"][len(prefix):].lstrip("/")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(read_object(store, bucket, item["Key"]))
-            count += 1
-    return count
+def write_result(spark, frame, name: str, export: str) -> None:
+    """결과를 spark.<name> Iceberg 테이블의 새 스냅샷으로(전체 덮어쓰기, 요약에 내보내기 ID). 없으면 시즌 파티션으로 만든다."""
+    from pyspark.sql import functions as F
+    from .iceberg import CATALOG_NAME, SNAPSHOT_PROPERTY, SPARK_NAMESPACE
+    table = f"{CATALOG_NAME}.{SPARK_NAMESPACE}.{name}"
+    spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {CATALOG_NAME}.{SPARK_NAMESPACE}")
+    if not spark.catalog.tableExists(table):
+        frame.limit(0).writeTo(table).using("iceberg").partitionedBy(F.col("season")).create()
+    frame.writeTo(table).option(f"snapshot-property.{SNAPSHOT_PROPERTY}", export).overwrite(F.lit(True))
 
 
-def run(store, bucket: str, snapshot: str | None = None) -> dict:
-    """스냅샷 입력으로 특징을 계산해 lake 버킷에 올린다. 이미 결과가 있으면 다시 계산하지 않는다(멱등)."""
+def run(settings, store, bucket: str, snapshot: str | None = None) -> dict:
+    """내보내기 스냅샷의 Iceberg 입력으로 특징·순위표를 계산해 spark.* Iceberg 테이블에 쓴다.
+    이미 그 내보내기의 결과가 있으면 다시 계산하지 않는다(멱등)."""
+    from . import iceberg
     snapshot = snapshot or json.loads(read_object(store, bucket, f"{PREFIX}/latest.json"))["snapshot"]
-    output = f"{OUTPUT_PREFIX}/snapshot={snapshot}"
-    existing = store.list_objects_v2(Bucket=bucket, Prefix=f"{output}/_manifest.json").get("KeyCount", 0)
-    if existing:
-        return {**json.loads(read_object(store, bucket, f"{output}/_manifest.json")), "newly_computed": False}
-    spark = spark_session()
-    with tempfile.TemporaryDirectory() as work:
-        work = Path(work)
-        download_prefix(store, bucket, f"{PREFIX}/{snapshot}/", work / "input")
-        matches = spark.read.parquet(str(work / "input" / "matches"))
-        history = spark.read.parquet(str(work / "input" / "team_match_results"))
-        features = compute_features(matches, history)
-        features.coalesce(1).write.parquet(str(work / "output"))   # 자료가 작아 파일 하나로
-        (part,) = sorted((work / "output").glob("part-*.parquet"))
-        rows = features.count()
-        put_if_absent(store, bucket, f"{output}/part-0.parquet", part.read_bytes(), {"rows": str(rows)},
-                      content_type=PARQUET)
-        nba_rows = 0
-        if (work / "input" / "nba_games").exists():   # NBA 자료가 없는 환경(테스트·CI)은 건너뛴다
-            standings = compute_nba_standings(spark.read.parquet(str(work / "input" / "nba_games")))
-            standings.coalesce(1).write.parquet(str(work / "nba_output"))
-            (nba_part,) = sorted((work / "nba_output").glob("part-*.parquet"))
-            nba_rows = standings.count()
-            put_if_absent(store, bucket, f"{NBA_OUTPUT_PREFIX}/snapshot={snapshot}/part-0.parquet", nba_part.read_bytes(),
-                          {"rows": str(nba_rows)}, content_type=PARQUET)
-        manifest = {"snapshot": snapshot, "rows": rows, "nba_standings_rows": nba_rows, "spark_version": spark.version,
-                    "rule": f"result known at kickoff + {AVAILABILITY_LAG_HOURS}h", "key": f"{output}/part-0.parquet"}
-        put_if_absent(store, bucket, f"{output}/_manifest.json", json.dumps(manifest).encode(), {"snapshot": snapshot})
+    cat = iceberg.catalog(settings, bucket)
+    done = {}
+    for name in (FEATURES_TABLE, NBA_TABLE):
+        identifier = f"{iceberg.SPARK_NAMESPACE}.{name}"
+        if cat.table_exists(identifier):
+            found = [item for item in iceberg.history(cat.load_table(identifier)) if item["export"] == snapshot]
+            if found:
+                done[name] = found[-1]["rows"]
+    if len(done) == 2:
+        return {"snapshot": snapshot, "rows": done[FEATURES_TABLE], "nba_standings_rows": done[NBA_TABLE],
+                "newly_computed": False}
+    inputs = {name: iceberg.snapshot_for_export(cat.load_table(f"{iceberg.NAMESPACE}.{name}"), snapshot)
+              for name in ("matches", "team_match_results", "nba_games")}
+    spark = spark_session(settings=settings)
+    # 시간 여행: 그 내보내기를 쓴 스냅샷. Iceberg 1.12부터 읽기 옵션(snapshot-id) 대신 SQL VERSION AS OF를 쓴다.
+    at_export = lambda name: spark.sql(
+        f"SELECT * FROM {iceberg.CATALOG_NAME}.{iceberg.NAMESPACE}.{name} VERSION AS OF {int(inputs[name])}")
+    features = compute_features(at_export("matches"), at_export("team_match_results"))
+    standings = compute_nba_standings(at_export("nba_games"))
+    write_result(spark, features, FEATURES_TABLE, snapshot)
+    write_result(spark, standings, NBA_TABLE, snapshot)
+    report = {"snapshot": snapshot, "rows": features.count(), "nba_standings_rows": standings.count(),
+              "input_snapshots": inputs, "spark_version": spark.version,
+              "rule": f"result known at kickoff + {AVAILABILITY_LAG_HOURS}h", "newly_computed": True}
     spark.stop()
-    return {**manifest, "newly_computed": True}
+    return report

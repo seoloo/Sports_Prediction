@@ -2,7 +2,7 @@
 
 python -m pipelines.lake.run export      Gold → Parquet(lake 버킷). 호스트에서도 된다
 python -m pipelines.lake.run iceberg     내보내기를 Iceberg 테이블 스냅샷으로 쓰고, 모든 스냅샷을 내보내기와 대조(7a)
-python -m pipelines.lake.run spark       Spark로 특징 재계산. pyspark가 있는 컨테이너에서만
+python -m pipelines.lake.run spark       Iceberg 입력으로 Spark 특징·순위표 재계산, 결과도 Iceberg(7b). jar가 있는 컨테이너에서만
 python -m pipelines.lake.run reconcile   Spark 결과 ↔ dbt 결과 대조. 호스트에서도 된다
 python -m pipelines.lake.run all         네 단계를 차례로(컨테이너 기본 명령). 대조나 Iceberg 검사가 실패하면 종료 코드 1
 
@@ -42,10 +42,10 @@ def main(argv=None) -> int:
                              "verify": iceberg.verify(settings, store, bucket)}
     if args.step in ("spark", "all"):
         from . import spark_features   # pyspark가 필요한 단계에서만 불러온다
-        report["spark"] = spark_features.run(store, bucket, snapshot)
+        report["spark"] = spark_features.run(settings, store, bucket, snapshot)
         snapshot = report["spark"]["snapshot"]
     if args.step in ("reconcile", "all"):
-        report["reconcile"] = reconcile.reconcile(store, bucket, snapshot)
+        report["reconcile"] = reconcile.reconcile(store, bucket, snapshot, settings)
     print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
     passed = report.get("reconcile", {}).get("passed", True) and report.get("iceberg", {}).get("verify", {}).get("passed", True)
     return 0 if passed else 1

@@ -20,7 +20,11 @@ RUN pip install --no-cache-dir "apache-airflow==3.3.2" "psycopg[binary]==3.3.6" 
  && /home/airflow/dbt-venv/bin/pip install --no-cache-dir -r /tmp/requirements-dbt.txt \
  && python -m venv /home/airflow/spark-venv \
  && /home/airflow/spark-venv/bin/pip install --no-cache-dir -r /tmp/requirements-spark.txt
+# 7b: Spark 이미지와 같은 Iceberg·JDBC jar(판·SHA-512 고정)
+COPY infra/spark/fetch_jars.py /tmp/fetch_jars.py
+RUN python /tmp/fetch_jars.py /home/airflow/iceberg-jars
 
 ENV DBT_EXECUTABLE=/home/airflow/dbt-venv/bin/dbt \
     SPARK_PYTHON=/home/airflow/spark-venv/bin/python \
+    ICEBERG_JARS=/home/airflow/iceberg-jars \
     PYTHONPATH=/opt/project
