@@ -67,6 +67,7 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | 5d-c | NBA 모델(점수 차 등급·Elo·연전 효과) 백테스트·평가 | [5d-c](docs/walkthrough/5d_c_nba_models.md) |
 | 5e | 주간 채점 보고서·텔레그램 요약에 NBA(경기 전 확률 vs 같은 시점 시장 확률) | [5e](docs/walkthrough/5e_weekly_nba.md) |
 | 6a | NBA dbt Gold(순위표·배당 확률) + 수집기별 데이터 신선도 검사(SLA) | [6a](docs/walkthrough/6a_nba_gold_freshness.md) |
+| 6b | NBA 순위표를 Spark로 원자료부터 다시 계산해 dbt와 대조(불일치 0) | [6b](docs/walkthrough/6b_nba_spark_reconcile.md) |
 
 평가 결과(시험 시즌 2023-24 이후, 로그 손실이 낮을수록 좋음):
 

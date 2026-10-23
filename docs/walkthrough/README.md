@@ -25,5 +25,6 @@
 | 5d-b | [NBA 배당](5d_b_nba_odds.md) | 크레딧 예산(하루 1번), 동부 날짜로 경기 묶기, 시작 시각 10분 차이와 3시간 연결 범위, 대조표가 NBA 팀을 축구로 만들던 문제 |
 | 5d-c | [NBA 모델](5d_c_nba_models.md) | 점수 차 등급·Elo·연전 효과, 버블 중립 경기, 격자 끝 선택과 시험 횟수 공개, 축구와 다른 모델을 같은 잣대로 |
 | 6a | [NBA Gold·데이터 신선도](6a_nba_gold_freshness.md) | 여러 종목 Gold, "데이터가 바뀌었나"와 "수집이 돌았나"를 나눈 신선도 검사, Windows가 포트를 예약해 막힌 사건 |
+| 6b | [NBA Spark 대조](6b_nba_spark_reconcile.md) | 순위 규칙까지 두 엔진이 따로 구현해 칸 단위로 맞추기, 원자료에서 시작해야 독립 검증인 이유 |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md), 주제별(예외 처리·메달리온·기술 스택) 정리는 [면접 준비 문서](../interview/README.md)를 함께 보세요.
