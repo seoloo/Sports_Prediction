@@ -20,6 +20,7 @@
 
 ```text
 football-data.org 수집기 ─┐                     ┌─ 소비자 → Silver(Postgres)
+                          ├─→ Kafka 토픽 ───────┤
 과거 시즌 재생기 ─────────┘   (127.0.0.1:45992)  └─ (재생은 별도 sports_replay DB)
 ```
 

@@ -44,6 +44,7 @@ Kafka의 경기 이벤트를 Silver(`silver.live_match_revisions`)에 버전으�
 | 거부 기록에 `UNIQUE(topic, partition, offset, reason)` | `silver.stream_rejections` (003_streaming.sql:36) | 같은 메시지를 다시 처리해도 거부 기록이 두 번 쌓이지 않게 |
 | 수정·삭제 차단 트리거 | 003_streaming.sql | 1단계와 같은 원칙. 버전과 거부 기록은 덮어쓰지 않는다 |
 | 기준 시각 함수 | `silver.live_match_revisions_known_at` (:53) | "그 시점에 출처가 발표했고(published_at) 우리도 받았던(received_at)" 버전만 고른다 |
+| 토픽별 처리 함수 | `dispatch_handler` (:97) | 토픽마다 처리 함수를 고르는 자리. 지금은 경기 이벤트 하나이고, 토픽이 늘면 여기서 나눈다 |
 
 ### 전달 보장: at-least-once + 멱등 저장
 

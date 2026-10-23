@@ -30,7 +30,7 @@
     <div>
       <div class="eyebrow">Matchday Automation · Prospective</div>
       <h1>경기마다 스스로 도는 기록과 채점</h1>
-      <div class="subtitle">사람이 매번 실행하지 않아도 경기 전 입력·예측·배당 비교가 쌓이고, 경기 후 결과로 채점됩니다. 축구 5개 리그와 NBA가 같은 규칙으로 돕니다.</div>
+      <div class="subtitle">사람이 매번 실행하지 않아도 경기 전 입력·예측이 쌓이고, 경기 후 결과로 채점됩니다. 축구 5개 리그와 NBA가 같은 규칙으로 돕니다.</div>
     </div>
     <div class="stamp legend"><span class="chip next">● 경기 전: 고정</span><span class="chip done">● 경기 후: 채점</span></div>
   </div>
@@ -43,14 +43,18 @@
     <div class="point"><div class="when">시작 24·3·1시간 전</div><div class="dot"></div>
       <div class="card step"><h3>입력 스냅샷</h3><p>그 순간 알려진 경기 정보·최근 5경기·배당만 고정. 90분 안에 못 찍으면 MISSED로 남기고 나중에 채우지 않음</p><div class="tags"><span class="chip done">30분마다</span></div></div></div>
     <div class="point"><div class="when">같은 순간</div><div class="dot"></div>
+      <div class="card step"><h3>예측 기록</h3><p>활성 모델 확률을 평가용으로 기록(검증 전이라 WITHHELD). 예측은 스냅샷과 같은 기준 시각에만 저장할 수 있게 DB가 강제</p><div class="tags"><span class="chip done">같은 as_of</span><span class="chip done">외래 키</span></div></div></div>
     <div class="point"><div class="when">기록 직후</div><div class="dot"></div>
+      <div class="card step"><h3>텔레그램 알림</h3><p>새 스냅샷만 한 번씩. 확률 대신 찍음·놓침과 보류 사유. 작업 실패도 알림</p><div class="tags"><span class="chip done">중복 방지</span></div></div></div>
     <div class="point after"><div class="when">경기 중·후</div><div class="dot"></div>
       <div class="card step"><h3>결과 반영</h3><p>축구 실시간 상태는 Kafka로(분 단위), 늦은 이벤트·중복은 거부. 결과 정정은 새 버전</p><div class="tags"><span class="chip done">Kafka</span><span class="chip done">Postgres</span></div></div></div>
     <div class="point after"><div class="when">매주 화요일</div><div class="dot"></div>
+      <div class="card step"><h3>주간 채점</h3><p>경기 전에 기록한 확률을 결과로 채점하고, <b>같은 시점의 시장 확률</b>과 로그 손실 비교</p><div class="tags"><span class="chip done">축구</span><span class="chip done">NBA</span></div></div></div>
   </div>
 
   <div class="why">
     <div class="card dark"><h3>왜 경기 전에 실제로 기록하나</h3><p>과거 자료로 다시 만든 백테스트는 실제 수집 지연과 그때 없던 정보를 재현하지 못합니다. 경기 전에 실제로 저장한 입력과 예측이 쌓여야 성능을 정직하게 말할 수 있습니다. 과거 배당이 없는 NBA는 이 기록이 시장과 비교하는 유일한 길입니다.</p></div>
+    <div class="card"><h3>한계</h3><p>PC와 Docker가 켜져 있을 때만 돕니다(놓친 시점은 MISSED로 남음). 의미 있는 채점에는 수백 경기가 쌓여야 합니다.</p></div>
   </div>
 </body>
 </html>

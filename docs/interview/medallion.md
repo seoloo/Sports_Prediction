@@ -57,7 +57,7 @@
 | 테이블 | 행 | 내용 |
 |---|---|---|
 | `silver.teams` | 182 | 기준 팀(축구 152: openfootball 이름, 농구 30: balldontlie 이름, `sport` 열로 구분) |
-| `silver.team_aliases` | 277 | 소스별 팀 이름·ID → 기준 팀(검토한 대조표) |
+| `silver.team_aliases` | 249 | 소스별 팀 이름·ID → 기준 팀(검토한 대조표) |
 | `silver.matches` | 12,264 | 경기의 변하지 않는 정체성(리그·시즌·홈·원정) |
 | `silver.match_revisions` | 12,264 | openfootball 경기 내용(일정·점수)의 버전 |
 | `silver.live_match_revisions` | 1,752 | football-data.org 경기 상태·점수의 버전(published_at = API 갱신 시각) |
@@ -79,7 +79,7 @@
 - **추측하지 않는다.** 결측은 NULL, 팀 연결은 대조표로만, 소스끼리 다르면 덮지 않고 기록.
 - **계보.** 각 버전이 `raw_file_id`로 Bronze 원본을 가리킨다.
 
-
+NBA 경기 전 스냅샷·예측(`snapshots.game_prematch_inputs`·`game_prematch_predictions`, 5d-d)도 같은 스키마입니다. 경기 전 스냅샷(`snapshots.prematch_inputs`, 30행)과 스냅샷 순간의 모델 예측(`snapshots.prematch_predictions`, 3d, 첫 기록 10/22 예정)은 Silver 옆의 별도 스키마입니다. 그 시점의 입력을 얼려 두는 증거라 Silver처럼 수정할 수 없고, Gold처럼 다시 만들지도 않습니다.
 
 알림 발송 기록(`notify.sent_messages`, 4b)은 데이터 층이 아니라 운영 기록입니다. 같은 알림을 두 번 보내지 않기 위한 장부라 본문 없이 해시만 남깁니다.
 
@@ -103,7 +103,7 @@
 | `staging.stg_odds_known` | 뷰 | 166,589 | 기준 시각에 알려진 배당 |
 | `gold.team_match_results` | 테이블 | 21,558 | 끝난 경기를 팀 관점 2행으로 |
 | `gold.league_standings` | 테이블 | 672 | 리그·시즌별 순위표 |
-| `gold.match_odds_1x2` | 테이블 | 33,021 | 1X2 배당과 마진을 뺀 확률(시장 기준선) |
+| `gold.match_odds_1x2` | 테이블 | 33,021 | 1X2(홈·무·원정) 배당과 마진을 뺀 확률(시장 기준선) |
 | `gold.match_stats` | 테이블 | 1,969 | 끝난 경기의 기록(3g). 대상 경기보다 앞서 끝난 경기의 것만 모델 입력 |
 | `gold.match_features_pit` | 테이블 | 11,416 | 시간순 학습 데이터셋(시작 전 정보만으로 만든 팀 지표, 3a) |
 | `staging.stg_games_known` | 뷰 | 11,429 | 기준 시각에 알려진 NBA 경기 정보(6a) |

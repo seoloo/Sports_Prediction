@@ -37,9 +37,9 @@
     <div>
       <div class="eyebrow">Current Architecture · Data Flow</div>
       <h1>지금 돌아가는 데이터 흐름</h1>
-      <div class="subtitle">6개 소스 → 원본 보존 → 버전 저장 → 변환·검증 → 모델·경기 전 기록 → 알림. 모든 단계가 "그때 알 수 있던 것"만 씁니다.</div>
+      <div class="subtitle">5개 소스 → 원본 보존 → 버전 저장 → 변환·검증 → 모델·경기 전 기록 → 알림. 모든 단계가 "그때 알 수 있던 것"만 씁니다.</div>
     </div>
-    <div class="stamp legend"><span class="chip done">● 자동</span><span class="chip warn">● 사람이 입력</span></div>
+    <div class="stamp legend"><span class="chip done">● 자동</span><span class="chip warn">● 사람이 받은 파일</span></div>
   </div>
 
   <div class="flow">
@@ -49,11 +49,12 @@
       <div class="card box"><h3>football-data.org</h3><p>실시간 경기 상태 · 분당 10회 한도</p></div>
       <div class="card box"><h3>The Odds API</h3><p>해외 배당 · 월 500크레딧 예산(경기 24·1시간 전, NBA 하루 1번, 핸디캡·언더오버는 요청 시)</p></div>
       <div class="card box"><h3>balldontlie</h3><p>NBA 일정·결과 · 분당 5회</p></div>
+      <div class="card box manual"><h3>football-data.co.uk CSV</h3><p>자동 다운로드 금지(약관) → 사람이 받아 landing 폴더에(과거 배당·경기 기록)</p></div>
     </div>
     <div class="col">
       <div class="label">Ingest</div>
       <div class="card box"><h3>배치 수집기</h3><p>요청 한도·429·크레딧, 키는 오류 메시지에서 제거</p></div>
-      <div class="card box"><h3>Kafka</h3><p>경기 갱신·직접 입력 이벤트, 중복·늦은 도착 거부, 과거 시즌 재생</p></div>
+      <div class="card box"><h3>Kafka</h3><p>경기 갱신 이벤트, 중복·늦은 도착 거부, 과거 시즌 재생</p></div>
       <div class="card box"><h3>품질 검사</h3><p>대조표로만 팀 연결, 문제는 버리지 않고 기록</p><span class="n">팀 별칭 461개</span></div>
     </div>
     <div class="col">
@@ -63,7 +64,8 @@
     <div class="col">
       <div class="label">Silver</div>
       <div class="card box layer"><h3>PostgreSQL 버전 테이블</h3><p>덮어쓰지 않고 추가만, 수정·삭제는 트리거가 차단, published_at · received_at</p>
-      <div class="card box"><h3>마이그레이션 18개</h3><p>스키마 변경을 순서대로 기록, advisory lock</p></div>
+        <span class="t">matches 12,264</span><span class="t">games 11,429</span><span class="t">odds 17.8만</span><span class="t">*_known_at(as_of)</span></div>
+      <div class="card box"><h3>마이그레이션 16개</h3><p>스키마 변경을 순서대로 기록, advisory lock</p></div>
     </div>
     <div class="col">
       <div class="label">Gold · Lake</div>
@@ -74,13 +76,14 @@
     <div class="col">
       <div class="label">Serve</div>
       <div class="card box"><h3>경기 전 스냅샷</h3><p>24·3·1시간 전 입력 고정, 놓치면 MISSED, 예측은 WITHHELD로 기록</p></div>
+      <div class="card box"><h3>시장 기준 확률</h3><p>스냅샷에 얼린 배당에서 마진을 뺀 확률. 모델을 채점할 때 같은 시점의 비교 기준</p></div>
       <div class="card box"><h3>채점 · 알림</h3><p>주간 채점(시장 vs 모델), 텔레그램(내보내기만)</p></div>
     </div>
   </div>
 
   <div class="bars">
     <div class="card bar"><div class="em">⚙️</div><div><b>Airflow DAG 4개</b><span>매일 축구 수집 → dbt → Spark 대조 · 매일 NBA 수집 · 30분마다 배당·스냅샷·알림 · 매주 채점</span></div></div>
-    <div class="card bar"><div class="em">🐳</div><div><b>Docker Compose + GitHub Actions</b><span>모든 포트 127.0.0.1 · 푸시마다 테스트 373개, Spark 컨테이너 테스트, 수집→dbt 종단 실행</span></div></div>
+    <div class="card bar"><div class="em">🐳</div><div><b>Docker Compose + GitHub Actions</b><span>모든 포트 127.0.0.1 · 푸시마다 테스트 202개, Spark 컨테이너 테스트, 수집→dbt 종단 실행</span></div></div>
   </div>
   <div class="rule"><span>모든 시각은 UTC로 저장, 화면은 한국 시각</span><span>키·비밀번호는 .env에만(Git 제외)</span><span>검증 전 모델의 확률은 보여 주지 않음</span></div>
 </body>

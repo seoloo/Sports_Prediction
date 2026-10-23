@@ -4,6 +4,7 @@
 
 ## 한 줄 요약
 
+매주 손으로 받던 `fixtures.csv`를 없앴습니다. 다섯 리그의 다가올 경기 배당(유럽 북메이커 약 25곳, Pinnacle 포함)을 The Odds API에서 자동으로 받아 버전으로 쌓고, 주간 채점의 "해외 기준 확률"로 씁니다. 무료 등급(월 500크레딧) 안에서 돌도록 경기 시작 24시간 전·1시간 전 스냅샷 직전에만 리그별로 받습니다.
 
 ## 이용 조건 검토(2026-10-21)
 
@@ -24,6 +25,8 @@
 prematch_snapshots DAG(30분마다)
  ├ fetch_due_odds   리그별 /events(무료) → 24시간·1시간 전 스냅샷이 35분 안에 오면 /odds(1크레딧)
  │                  → Bronze(원본 JSON) → silver.odds_revisions(source = the-odds-api, 값이 바뀐 것만 새 버전)
+ ├ take_due_snapshots   스냅샷 입력에 그때 알려진 배당이 들어감 → 예측, 나중에 채점할 시장 기준
+ └ notify_snapshots     텔레그램: 경기 전 스냅샷·예측 상태
 ```
 
 ## 설계 결정과 이유
@@ -37,6 +40,7 @@ prematch_snapshots DAG(30분마다)
 | 배당 발표 시각 = 북메이커 `last_update` | `quotes`, `published_at` | 이 배당이 언제 그 값이 됐는지 안다. 기준 시각 함수가 그 시각과 받은 시각을 모두 본다 |
 | 팀 이름은 검토한 대조표로만 | `mappings/team_aliases.csv`(source = the-odds-api, 96개) | 같은 리그에서 시작 시각이 정확히 같은 경기 중 이름이 가장 비슷한 경기로 후보를 만들고, 유사도 0.75 미만 16개는 사람이 확인했다(AZ Alkmaar ↔ AZ, Inter Milan ↔ FC Internazionale Milano 등) |
 | 연결 실패는 품질 문제로 | `silver.quality_issues`(`UNMAPPED_TEAM`, `MATCH_NOT_FOUND`) | 버리지 않고 남긴다 |
+| 해외 기준 확률 우선순위 | `pipelines/modeling/market.py`의 `football_market_fair` | co.uk 평균(직접 넣은 경우) → Pinnacle(마진이 작고 정확하다고 알려진 곳) → 북메이커 3곳 이상의 평균. 어느 것을 썼는지 출처를 함께 돌려준다 |
 | 배당 수집 실패가 스냅샷을 막지 않음 | DAG `trigger_rule="all_done"`, 재시도 0 | 스냅샷은 그때 알려진 배당으로 찍는다. 재시도로 크레딧을 쓰지 않는다 |
 | 키를 오류에서 지움 | `call`(`raise … from None`) | 키가 URL 쿼리에 들어간다 |
 | Kafka를 거치지 않음 | 수집기가 Silver에 바로 | 하루 몇 번 받는 배치라 실시간 스트림이 필요 없다(co.uk 수집과 같은 방식) |
@@ -76,6 +80,7 @@ prematch_snapshots DAG(30분마다)
 | Postgres 임시 테이블 + `COPY` + 집합 SQL | `write_odds` → `silver.odds_revisions` | `COPY`로 임시 테이블에 넣고 SQL 한 번으로 "값이 바뀐 배당만 새 버전"을 추가. `published_at` = 북메이커 `last_update` |
 | SQL 마이그레이션 | `pipelines/sql/011_the_odds_api.sql` | 소스 검토 결과(`ingest.sources`)를 데이터로 기록 |
 | 문자열 유사도(`difflib.SequenceMatcher`) | `suggest_aliases` | 시작 시각이 같은 경기 중 이름이 가장 비슷한 쪽으로 대조표 후보를 만들고, 0.75 미만은 사람이 확인 |
+| 마진 제거 확률(정규화) | `modeling/market.football_market_fair` | 1/배당을 합이 1이 되게 나눠 공정 확률로 씀. Pinnacle 우선 → 3곳 이상 평균 |
 | Airflow `trigger_rule="all_done"`, `retries=0` | `dags/prematch_snapshots.py` | 배당 수집이 실패해도 스냅샷은 찍고, 재시도로 크레딧을 쓰지 않음 |
 | 비밀값 보호(`raise … from None`) | `the_odds_api.call` | URL 쿼리에 든 API 키가 예외 메시지·로그에 남지 않게 원래 예외를 끊음 |
 | pytest 가짜 opener | `tests/test_the_odds_api.py` | 네트워크 없이 크레딧 계산·시점 판단·키 제거를 시험 |

@@ -15,7 +15,6 @@
 | 오케스트레이션 | Apache Airflow(standalone, LocalExecutor) | 3.3.2 | 사용 중 |
 | 실행 환경 | Docker Compose(프로필 `streaming`, `airflow`) | — | 사용 중 |
 | CI | GitHub Actions + pytest | checkout@v5, setup-python@v6 / pytest 9.1.1 | 사용 중 |
-| 개인 앱 | Streamlit + SQLite | 1.65.0 / 표준 라이브러리 | 사용 중(기존 카탈로그 앱) |
 | 알림 | 텔레그램 Bot API(표준 라이브러리 urllib) | — | 사용 중(4b), 실제 전송은 토큰 설정 후 |
 | 배당 API | The Odds API(무료 Starter, 월 500크레딧) | v4 | 사용 중(5b): 다섯 리그, 경기 24·1시간 전, Pinnacle 우선. NBA(5d-b)는 하루 1번 |
 | NBA 경기 API | balldontlie(무료, 분당 5회, `Authorization` 헤더 키) | v1 | 사용 중(5d-a): 2018-19~ 아홉 시즌, 매일 12:00 UTC |
@@ -32,7 +31,7 @@
 ```text
 openfootball(자동) ─┐
 football-data.co.uk ┼─ 배치 수집(Airflow DAG) ─┐
-(사람이 받은 CSV)   ┘                          ├→ Bronze(SeaweedFS) → Silver(Postgres) → Gold(dbt) → 모델·화면
+(사람이 받은 CSV)   ┘                          ├→ Bronze(SeaweedFS) → Silver(Postgres) → Gold(dbt) → 모델·알림
 football-data.org ── 수집기 → Kafka → 소비자 ──┘
                                   모두 Docker Compose 위에서, 검증은 GitHub Actions
 ```
@@ -42,7 +41,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 ### Python 3.12
 
 - **역할:** 수집기, Kafka 생산자·소비자, 스냅샷, 데이터셋 검증, 테스트 전부.
-- **왜:** 데이터 엔지니어링 도구(Airflow, dbt, Kafka 클라이언트, boto3)가 모두 Python을 1순위로 지원한다. 앱(Streamlit)도 Python이라 언어를 하나로 유지했다.
+- **왜:** 데이터 엔지니어링 도구(Airflow, dbt, Kafka 클라이언트, boto3)가 모두 Python을 1순위로 지원해 언어를 하나로 유지했다.
 - **버전 고정:** 컨테이너는 `python:3.12.14-slim-bookworm`, 로컬 가상환경도 3.12.14. Airflow 이미지가 Python 3.12 기반이라 맞췄다.
 
 ### PostgreSQL 16.4 (Silver·Gold)
@@ -77,6 +76,7 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 
 - **겪은 문제:** 새 소비자 그룹은 파티션 배정까지 몇 초 걸린다. 테스트용 "메시지가 없으면 종료" 모드가 배정 전 빈 응답을 세다가 CI에서 메시지를 하나도 읽지 않고 끝났다. 배정 후부터 세도록 고쳤다([예외 처리 기록](error_handling.md) 16번).
 
+- **역할:** football-data.org 경기 갱신을 이벤트로 받아 Silver에 반영. 과거 시즌을 같은 경로로 재생해 소비자를 검증.
 - **왜 Kafka인가:**
   - 수집과 저장을 분리한다. DB가 잠시 멈춰도 이벤트는 Kafka에 남아 있다가 다시 처리된다.
   - 오프셋을 처음으로 돌려 전체를 다시 처리(재생)할 수 있다. 실제로 380개 이벤트를 다시 처리해 Silver가 그대로인 것을 확인했다.
@@ -89,14 +89,15 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
   - 힙 512MB로 제한: 노트북에서 다른 서비스와 함께 돌리기 위해.
 - **왜 Kafka 트랜잭션(exactly-once)을 안 썼나:** Kafka의 exactly-once는 Kafka 안(읽기→쓰기)에서만 보장된다. 이 프로젝트의 최종 저장소는 Postgres라, 어차피 Postgres 쪽에서 중복을 걸러야 한다. 그래서 "최소 한 번 + 멱등 저장"이 더 단순하고 정확하다.
 - **대안:** Redpanda(Kafka 호환, 가볍다)도 가능했지만, 면접에서 설명할 표준 구성과 공식 이미지를 택했다. 클라이언트는 kafka-python 대신 librdkafka 기반으로 멱등 생산자를 제대로 지원하는 confluent-kafka를 썼다.
+- **쓰는 곳:** `pipelines/streaming/`(events, kafka_io, match_consumer, replay), `infra/docker-compose.yml`.
 
 ### dbt-core 1.12.6 + dbt-postgres 1.11.0 (Gold)
 
-- **역할:** Silver를 읽어 순위표, 1X2 확률, 시간순 학습 데이터셋을 SQL로 만들고 품질 테스트를 돌린다.
+- **역할:** Silver를 읽어 순위표, 마진을 뺀 배당 확률, 시간순 학습 데이터셋을 SQL로 만들고 품질 테스트를 돌린다.
 - **왜:** 변환 규칙을 SQL 파일로 버전 관리하고, 모델 간 의존(계보)을 dbt가 계산하며, 테스트가 실패하면 빌드가 실패한다. 현재 모델 12개, 테스트 38개(3g에서 경기 기록, 6a에서 NBA 추가). 6a부터 `dbt source freshness`로 수집기별 신선도(SLA)도 검사.
 - **설계:** 시점 선택은 Silver 함수에 맡기고 dbt는 `as_of` 변수만 넘긴다(규칙을 두 곳에 두지 않음).
 - **겪은 문제:**
-  - Streamlit과 protobuf 버전이 충돌해 별도 가상환경(`.venv-dbt`, Airflow 이미지 안에서는 `/home/airflow/dbt-venv`)에 설치했다.
+  - 처음 함께 쓰던 Streamlit과 protobuf 버전이 충돌해 별도 가상환경(`.venv-dbt`, Airflow 이미지 안에서는 `/home/airflow/dbt-venv`)에 설치했다.
   - Windows 기본 인코딩(CP949) 때문에 한글 SQL 주석을 못 읽어 `PYTHONUTF8=1`을 넣었다(`pipelines/dbt_runner.py`).
 - **대안:** Python(pandas)으로 집계할 수도 있지만, SQL로 두면 DB 안에서 처리되고 다른 사람이 읽기 쉽다. 3a의 누수 검사는 일부러 Python으로 한 번 더 구현해 dbt 결과와 비교한다.
 
@@ -132,11 +133,6 @@ football-data.org ── 수집기 → Kafka → 소비자 ──┘
 - **구성:** Postgres는 서비스 컨테이너, SeaweedFS와 Kafka는 `docker run`으로 띄운다(서비스 컨테이너는 실행 명령을 바꿀 수 없는데, 두 서비스는 실행 명령·환경 설정이 필요하다).
 - **`REQUIRE_INTEGRATION=1`:** 로컬에서는 서비스가 없으면 통합 테스트를 건너뛰지만, CI에서는 건너뛰기를 실패로 본다. "건너뛰어서 통과"를 막기 위해서다.
 - **최근 결과:** 마지막으로 GitHub에서 돈 CI는 run 39550436142(테스트 289개, dbt `PASS=28`). 이후 로컬에서는 dbt `PASS=34`(모델 8 + 테스트 26), 전체 테스트 수는 해설 문서에 단계별로 남긴다.
-
-### Streamlit 1.65.0 + SQLite (기존 개인 앱)
-
-- **역할:** 프로젝트를 시작할 때부터 있던 종목 카탈로그·근거 화면(`app.py`, `src/`). 127.0.0.1에만 연다.
-- **왜:** Python만으로 화면을 빨리 만들 수 있다. 데이터 엔지니어링 파이프라인과는 별개로 유지 중이며, 모델 결과를 보여 주는 화면은 3d 이후 계획이다.
 
 ### Apache Spark 4.1.3 + Parquet(pyarrow 25.0.1) (4a)
 
