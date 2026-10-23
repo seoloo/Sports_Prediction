@@ -1,6 +1,6 @@
 # 2c. Kafka 소비자 → Silver
 
-작성: 2026-10-21. 이 단계의 커밋: `ccb195a`(소비자 구현), `92a3a04`(Gold가 football-data.org 정보를 우선 사용).
+작성: 2026-10-21. 이 단계의 커밋: `120a24c`(소비자 구현), `d2bacf4`(Gold가 football-data.org 정보를 우선 사용).
 
 ## 한 줄 요약
 
