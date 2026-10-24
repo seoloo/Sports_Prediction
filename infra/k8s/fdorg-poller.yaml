@@ -1,0 +1,47 @@
+# football-data.org 수집기. API 한도(분당 10회)를 한 프로세스가 지켜야 해서 반드시 하나만 돈다:
+# replicas 1 + Recreate(새 파드를 띄우기 전에 옛 파드를 먼저 내린다. 롤링 업데이트 중 두 개가 겹치지 않게).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fdorg-poller
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fdorg-poller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fdorg-poller
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: poller
+          image: sports-prediction-pipeline-app:0.1
+          imagePullPolicy: Never   # 로컬에서 만든 이미지를 클러스터에 직접 넣는다(레지스트리 없음)
+          command: ["python", "-m", "pipelines.ingest.football_data_org"]
+          envFrom:
+            - configMapRef:
+                name: pipeline-config
+            - secretRef:
+                name: pipeline-secrets
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

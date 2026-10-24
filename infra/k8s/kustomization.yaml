@@ -1,0 +1,25 @@
+# 로드맵 8a: 상시 실행 서비스(football-data.org 수집기, Kafka 소비자)를 쿠버네티스에 올리는 정의.
+# 적용: kubectl apply -k infra/k8s   (로컬 확인은 scripts/k8s_local.py가 클러스터 준비·비밀 값·외부 주소까지 한다)
+# 비밀 값(pipeline-secrets)은 여기 두지 않는다. .env에서 필요한 키만 골라 클러스터에 직접 만든다.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: sports-prediction
+resources:
+  - namespace.yaml
+  - external-services.yaml
+  - fdorg-poller.yaml
+  - stream-consumer.yaml
+configMapGenerator:
+  - name: pipeline-config
+    literals:
+      # 파드 안에서도 compose와 같은 이름으로 접속한다(external-services.yaml의 Service 이름).
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=sports
+      - S3_ENDPOINT_URL=http://object-store:8333
+      - BRONZE_BUCKET=bronze
+      - KAFKA_BOOTSTRAP=kafka:9092
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: sports-prediction
+    includeSelectors: false
