@@ -80,6 +80,7 @@ football-data.org(실시간 경기) ── 수집기 → Kafka → 소비자 ─
 | 7a | Iceberg 레이크하우스: 내보내기마다 테이블 스냅샷, 내보내기 ID·시각으로 시간 여행, dbt 시점 재계산과 일치 | [7a](docs/walkthrough/7a_iceberg_lakehouse.md) |
 | 7b | Spark가 같은 카탈로그로 Iceberg 테이블을 시간 여행으로 읽고 결과도 Iceberg로(jar 판·SHA-512 고정), 불일치 0 | [7b](docs/walkthrough/7b_spark_iceberg.md) |
 | 7c | 운영 상태 보고서: 신선도·수집 실패·크레딧·오류 큐·경기 전 기록·채점·레이크를 OK/WARN/FAIL로 한 장(HTML·JSON), 매일 자동 | [7c](docs/walkthrough/7c_ops_status.md) |
+| 8a | 수집기·소비자 Kubernetes 배포(Kustomize, 최소 권한, 하나만 실행), 로컬 k3s로 실제 동작·자가 회복 확인 후 삭제 | [8a](docs/walkthrough/8a_kubernetes.md) |
 
 평가 결과(시험 시즌 2023-24 이후, 로그 손실이 낮을수록 좋음):
 
@@ -167,6 +168,7 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 | 데이터 신선도 검사(수집이 멈췄는지) | `.\.venv\Scripts\python.exe -m pipelines.dbt_runner source freshness` |
 | Kafka 오류 큐 요약 / 대조표를 고친 뒤 다시 보내기 | `.\.venv\Scripts\python.exe -m pipelines.streaming.dlq summary` / `... dlq replay` |
 | 운영 상태 보고서 만들기(`data/ops/status.html`, 매일 DAG도 자동으로) | `.\.venv\Scripts\python.exe -m pipelines.ops.status` |
+| Kubernetes(k3s)로 수집기·소비자 돌려 보기 / 상태 / 정리(compose 쪽을 잠시 멈추고 되살림) | `.\.venv\Scripts\python.exe scripts\k8s_local.py up` / `status` / `down` |
 | 과거 시점으로 Gold 다시 계산 | `.\.venv\Scripts\python.exe -m pipelines.dbt_runner build --vars "{as_of: '2025-01-01T00:00:00Z'}"` |
 
 ### 5. 테스트
@@ -195,6 +197,6 @@ PC와 Docker Desktop이 켜져 있을 때만 돕니다. 작업이 실패하면 �
 - **모델은 아직 검증되지 않았습니다.** EPL은 시장 배당보다 부정확했고, 다른 네 리그는 과거 배당이 없어 비교하지 못했습니다. The Odds API로 쌓이는 경기 전 배당으로 앞으로 비교합니다.
 - **경기 기록(슈팅·퇴장)은 EPL만 있습니다.** 라인업·부상 정보는 쓰지 않습니다.
 - **NBA도 축구와 같은 흐름이 돕니다(5d-a~d).** 과거 NBA 배당이 없어 시장 비교는 주간 보고서가 앞으로 쌓이는 경기 전 기록으로 합니다(5e).
-- **미니 PC 상시 운영(4c)**은 장비 도입 후입니다.
+- **상시 운영은 미니 PC 도입 후입니다(8b).** Kubernetes 정의(8a)는 만들어 확인했지만, 같은 PC에서는 확인할 때만 띄웁니다.
 
 Football data provided by the Football-Data.org API.

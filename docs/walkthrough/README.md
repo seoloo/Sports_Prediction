@@ -32,5 +32,6 @@
 | 7a | [Iceberg 레이크하우스](7a_iceberg_lakehouse.md) | 파일 묶음과 테이블 형식의 차이, SQL 카탈로그, 내보내기 ID 스냅샷과 시간 여행, 두 시간 여행(Postgres·Iceberg)이 같은 답인지 |
 | 7b | [Spark ↔ Iceberg](7b_spark_iceberg.md) | 한 카탈로그를 두 엔진(PyIceberg·Spark)이 함께 쓰기, JDBC 카탈로그와 S3FileIO, `VERSION AS OF` 시간 여행, 외부 jar 공급망 확인 |
 | 7c | [운영 상태 보고서](7c_ops_status.md) | 무엇을 보고 언제 경고하나, dbt 판정 재사용, 정상 동작을 경고에서 빼는 이유, 실패한 날에도 만드는 보고서 |
+| 8a | [Kubernetes 배포](8a_kubernetes.md) | 상태 없는 앱만 올리기, selector 없는 Service로 밖의 저장소 연결, 하나만 실행·최소 권한, 레지스트리 없이 이미지 넣기 |
 
 전체 구조는 [코드 가이드](../code_guide.md), 계획과 진행 상태는 [로드맵](../de_platform_roadmap.md), 주제별(예외 처리·메달리온·기술 스택) 정리는 [면접 준비 문서](../interview/README.md)를 함께 보세요.
